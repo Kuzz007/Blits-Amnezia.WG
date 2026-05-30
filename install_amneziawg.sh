@@ -33,6 +33,13 @@ else
 
   echo "Добавление PPA репозитория AmneziaWG..."
   add-apt-repository -y ppa:amnezia/ppa
+
+  # Если дистрибутив resolute (Ubuntu 26.04), подменяем кодовое имя на noble, так как для 26.04 еще нет официальной сборки в PPA
+  if grep -q "resolute" /etc/apt/sources.list.d/amnezia-ubuntu-ppa-*.list 2>/dev/null; then
+    echo "Обнаружена Ubuntu 26.04 (Resolute). Подменяем кодовое имя репозитория на noble..."
+    sed -i 's/resolute/noble/g' /etc/apt/sources.list.d/amnezia-ubuntu-ppa-*.list 2>/dev/null || true
+  fi
+
   apt-get update
 
   echo "Установка amneziawg..."
