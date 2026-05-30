@@ -1,0 +1,491 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Клиенты | Blitz Panel</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .modal-body-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 200px;
+            gap: 24px;
+        }
+        .status-cell {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            align-items: flex-start;
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+        }
+        .status-dot.online { background: var(--success); }
+        .status-dot.offline { background: var(--text-muted); }
+        .traffic-cell {
+            min-width: 150px;
+        }
+        .traffic-line {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+        .traffic-bar {
+            height: 7px;
+            border-radius: 999px;
+            background: var(--gray-light);
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+        .traffic-fill {
+            height: 100%;
+            width: var(--traffic-percent);
+            background: var(--success);
+        }
+        .traffic-fill.danger {
+            background: var(--danger);
+        }
+        @media (max-width: 600px) {
+            .modal-body-layout { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body data-theme="{{ request.cookies.get('panel_theme', 'light') }}">
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo-icon"><img src="/static/blitz-sloth-logo.svg?v=3" alt="Blitz"></div>
+                <div class="logo-text">Blitz Panel</div>
+            </div>
+            <ul class="sidebar-menu">
+                <li class="menu-item {% if current_page == 'dashboard' %}active{% endif %}">
+                    <a href="/dashboard"><i class="fa-solid fa-chart-line"></i> Дашборд</a>
+                </li>
+                <li class="menu-item {% if current_page == 'clients' %}active{% endif %}">
+                    <a href="/clients"><i class="fa-solid fa-users"></i> Клиенты</a>
+                </li>
+                <li class="menu-item {% if current_page == 'events' %}active{% endif %}">
+                    <a href="/events"><i class="fa-solid fa-clock-rotate-left"></i> Журнал</a>
+                </li>
+                <li class="menu-item {% if current_page == 'password' %}active{% endif %}">
+                    <a href="/settings/password"><i class="fa-solid fa-key"></i> Смена пароля</a>
+                </li>
+                <li class="menu-item {% if current_page == 'vpn_settings' %}active{% endif %}">
+                    <a href="/settings/vpn"><i class="fa-solid fa-sliders"></i> Настройки VPN</a>
+                </li>
+                <li class="menu-item {% if current_page == 'cascade_settings' %}active{% endif %}">
+                    <a href="/settings/cascade"><i class="fa-solid fa-route"></i> Каскад</a>
+                </li>
+                <li class="menu-item {% if current_page == 'api_docs' %}active{% endif %}">
+                    <a href="/settings/api"><i class="fa-solid fa-code"></i> API</a>
+                </li>
+                <li class="menu-item {% if current_page == 'panel_settings' %}active{% endif %}">
+                    <a href="/settings/panel"><i class="fa-solid fa-window-maximize"></i> Настройки панели</a>
+                </li>
+                <li class="menu-item" style="margin-top: auto;">
+                    <a href="/logout" style="color: #f1f5f9;"><i class="fa-solid fa-right-from-bracket"></i> Выйти</a>
+                </li>
+            </ul>
+            <div class="sidebar-footer">
+                <div class="user-avatar">A</div>
+                <div class="user-info">
+                    <span class="user-name">Администратор</span>
+                    <span class="user-role">Главный admin</span>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="main-header">
+                <h1 class="page-title">Управление клиентами VPN</h1>
+                <div class="header-actions">
+                    <button class="btn btn-primary" onclick="toggleCreateForm()"><i class="fa-solid fa-user-plus"></i> Новый клиент</button>
+                </div>
+            </header>
+
+            <div class="content-body">
+                <div id="create-client-card" class="content-card" style="display: none;">
+                    <div class="card-header">
+                        <h2 class="card-title"><i class="fa-solid fa-user-plus"></i> Добавить нового клиента AmneziaWG</h2>
+                        <button class="close-btn" onclick="toggleCreateForm()">&times;</button>
+                    </div>
+                    <div class="card-body">
+                        <form action="/clients/create" method="post">
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+                                <div class="form-group">
+                                    <label for="name">Имя клиента / устройство</label>
+                                    <input type="text" id="name" name="name" class="form-control" placeholder="например, user_iphone" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="route_type">Где создать ключ</label>
+                                    <select id="route_type" name="route_type" class="form-control">
+                                        <option value="local">Обычная Amnezia на этом сервере</option>
+                                        <option value="cascade" {% if cascade.enabled != '1' or not cascade.target_panel_url or not cascade.target_api_token %}disabled{% endif %}>Каскад на целевом сервере</option>
+                                    </select>
+                                    {% if cascade.enabled != '1' or not cascade.target_panel_url or not cascade.target_api_token %}
+                                    <span class="client-subtext">Для каскада включите правила и укажите URL/API-токен целевой панели.</span>
+                                    {% endif %}
+                                </div>
+                                <div class="form-group">
+                                    <label for="days">Дней действия</label>
+                                    <input type="number" id="days" name="days" class="form-control" value="30" min="1" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="traffic_limit_gb">Лимит трафика (ГБ, 0 = безлимит)</label>
+                                    <input type="number" step="0.1" id="traffic_limit_gb" name="traffic_limit_gb" class="form-control" value="0" min="0" required>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 12px; margin-top: 16px;">
+                                <button type="submit" class="btn btn-primary">Создать ключ</button>
+                                <button type="button" class="btn btn-secondary" onclick="toggleCreateForm()">Отмена</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="content-card">
+                    <div class="card-header">
+                        <h2 class="card-title"><i class="fa-solid fa-list"></i> Активные VPN-ключи</h2>
+                    </div>
+                    <div class="card-body" style="padding: 0;">
+                        <div class="table-toolbar" style="padding: 24px 32px 12px 32px;">
+                            <form action="/clients" method="get" class="search-box">
+                                <span class="search-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
+                                <input type="text" name="search" class="form-control" placeholder="Поиск по имени или IP..." value="{{ search }}">
+                            </form>
+                            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                                <form id="bulk-form" action="/clients/bulk" method="post"></form>
+                                <input form="bulk-form" type="number" name="days" value="30" min="1" class="form-control" style="width: 90px;" title="Дней">
+                                <button form="bulk-form" type="submit" name="action" value="extend" class="btn btn-secondary btn-sm"><i class="fa-solid fa-clock-rotate-left"></i> Продлить</button>
+                                <button form="bulk-form" type="submit" name="action" value="disable" class="btn btn-secondary btn-sm"><i class="fa-solid fa-pause"></i> Отключить</button>
+                                <button form="bulk-form" type="submit" name="action" value="delete" class="btn btn-danger btn-sm" onclick="return confirm('Удалить выбранных клиентов?');"><i class="fa-solid fa-trash-can"></i> Удалить</button>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table-custom">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 44px;"><input type="checkbox" onclick="document.querySelectorAll('.client-check').forEach(cb => cb.checked = this.checked)"></th>
+                                        <th>Клиент</th>
+                                        <th>Внутренний IP</th>
+                                        <th>Действует до</th>
+                                        <th>Лимит / трафик</th>
+                                        <th>Ключ</th>
+                                        <th>Подключение</th>
+                                        <th style="text-align: right;">Действия</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% if not clients %}
+                                    <tr>
+                                        <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 40px;">
+                                            <i class="fa-solid fa-folder-open" style="font-size: 32px; display: block; margin-bottom: 12px;"></i>
+                                            Клиенты не найдены.
+                                        </td>
+                                    </tr>
+                                    {% endif %}
+                                    {% for client in clients %}
+                                    <tr>
+                                        <td><input class="client-check" form="bulk-form" type="checkbox" name="client_ids" value="{{ client.id }}"></td>
+                                        <td>
+                                            <div class="client-name-cell">
+                                                <strong><a href="/clients/{{ client.id }}" style="color: var(--text-main);">{{ client.name }}</a></strong>
+                                                <span class="client-subtext">Создан: {{ client.created_at | datetime }}</span>
+                                                {% if client.telegram_id %}
+                                                <span class="client-subtext"><i class="fa-brands fa-telegram"></i> {{ client.telegram_id }}</span>
+                                                {% endif %}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <code style="font-family: monospace; font-size: 13px; font-weight: 600;">{{ client.display_ip_address }}</code>
+                                            {% if client.route_type == 'cascade' %}
+                                            <span class="client-subtext"><i class="fa-solid fa-route"></i> Каскад</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ client.expires_at | datetime }}</td>
+                                        <td class="traffic-cell">
+                                            <div class="traffic-line">
+                                                <strong style="color: var(--text-main);">{{ client.traffic_used_text }}</strong>
+                                                <span>{{ client.traffic_limit_text }}</span>
+                                            </div>
+                                            {% if client.traffic_limit_text != 'Безлимит' %}
+                                            <div class="traffic-bar" title="{{ client.traffic_percent }}%">
+                                                <div class="traffic-fill {% if client.traffic_limit_exceeded %}danger{% endif %}" style="--traffic-percent: {{ client.traffic_percent }}%;"></div>
+                                            </div>
+                                            {% else %}
+                                            <span class="client-subtext">Ограничение не задано</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if client.traffic_limit_exceeded %}
+                                            <span class="badge badge-danger">Лимит исчерпан</span>
+                                            {% elif client.disabled_at %}
+                                            <span class="badge badge-gray">Выключен</span>
+                                            {% elif client.is_expired %}
+                                            <span class="badge badge-danger">Истек срок</span>
+                                            {% else %}
+                                            <span class="badge badge-success">Активен</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <div class="status-cell">
+                                                {% if client.is_online %}
+                                                <span class="badge badge-success"><span class="status-dot online"></span> Онлайн</span>
+                                                {% else %}
+                                                <span class="badge badge-gray"><span class="status-dot offline"></span> Не подключен</span>
+                                                {% endif %}
+                                                <span class="client-subtext">
+                                                    {{ client.last_seen_text }}{% if client.connected_interface %}, {{ client.connected_interface }}{% endif %}
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td style="text-align: right;">
+                                            <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                                                <script id="data-{{ client.id }}" type="application/json">
+                                                {
+                                                  "name": "{{ client.name }}",
+                                                  "config_text": {{ client.config_text | tojson }},
+                                                  "deep_link": "{{ client.deep_link }}",
+                                                  "deep_link_v2": "{{ client.deep_link_v2 }}",
+                                                  "config_text_split": {{ client.config_text_split | tojson }},
+                                                  "deep_link_split": "{{ client.deep_link_split }}",
+                                                  "deep_link_split_v2": "{{ client.deep_link_split_v2 }}"
+                                                }
+                                                </script>
+                                                <button class="btn btn-secondary btn-sm" onclick="openConfigModal('{{ client.id }}')">
+                                                    <i class="fa-solid fa-key"></i> Конфиг
+                                                </button>
+                                                <form action="/clients/{{ client.id }}/extend" method="post" style="display:inline;">
+                                                    <input type="hidden" name="days" value="30">
+                                                    <button type="submit" class="btn btn-secondary btn-sm" title="Продлить на 30 дней">
+                                                        <i class="fa-solid fa-clock-rotate-left"></i> +30 дней
+                                                    </button>
+                                                </form>
+                                                {% if client.disabled_at %}
+                                                <form action="/clients/{{ client.id }}/enable" method="post" style="display:inline;">
+                                                    <button type="submit" class="btn btn-primary btn-sm" title="Включить"><i class="fa-solid fa-play"></i></button>
+                                                </form>
+                                                {% else %}
+                                                <form action="/clients/{{ client.id }}/disable" method="post" style="display:inline;">
+                                                    <button type="submit" class="btn btn-warning btn-sm" title="Отключить" style="background-color: var(--warning); color: white;"><i class="fa-solid fa-pause"></i></button>
+                                                </form>
+                                                {% endif %}
+                                                <form action="/clients/{{ client.id }}/delete" method="post" style="display:inline;" onsubmit="return confirm('Удалить этого клиента?');">
+                                                    <button type="submit" class="btn btn-danger btn-sm" title="Удалить"><i class="fa-solid fa-trash-can"></i></button>
+                                                </form>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="config-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title-text" class="modal-title">Конфигурация ключа</h3>
+                <button class="close-btn" onclick="closeConfigModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="display: flex; justify-content: center; margin-bottom: 20px;">
+                    <div style="display: flex; background-color: var(--gray-light); padding: 4px; border-radius: 8px; border: 1px solid var(--border-color); width: 100%; max-width: 460px;">
+                        <button id="toggle-mode-full" class="btn btn-sm" style="flex: 1; padding: 8px 12px; font-weight: 600; border-radius: 6px; border: none; cursor: pointer; background-color: var(--primary); color: white;" onclick="switchRoutingMode('full')">
+                            <i class="fa-solid fa-globe"></i> Полный туннель
+                        </button>
+                        <button id="toggle-mode-split" class="btn btn-sm" style="flex: 1; padding: 8px 12px; font-weight: 600; border-radius: 6px; border: none; cursor: pointer; background-color: transparent; color: var(--text-muted);" onclick="switchRoutingMode('split')">
+                            <i class="fa-solid fa-route"></i> Раздельный
+                        </button>
+                    </div>
+                </div>
+
+                <div class="modal-body-layout">
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <span style="font-weight: 600; font-size: 14px;">Конфигурация AmneziaWG:</span>
+                        <div id="modal-config-text" class="config-preview-box"></div>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn btn-primary btn-sm" onclick="copyConfigToClipboard()"><i class="fa-solid fa-copy"></i> Копировать конфиг</button>
+                            <a id="modal-download-link" href="#" class="btn btn-secondary btn-sm"><i class="fa-solid fa-download"></i> Скачать .conf</a>
+                        </div>
+                    </div>
+                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;">
+                        <span style="font-weight: 600; font-size: 14px; text-align: center;">QR-код для импорта</span>
+                        <div class="qr-box"><img id="modal-qr-img" src="" alt="QR Code"></div>
+                    </div>
+                </div>
+
+                <hr style="border: none; border-top: 1px solid var(--border-color); margin: 8px 0;">
+
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                        <span style="font-weight: 600; font-size: 14px;"><i class="fa-solid fa-mobile-screen-button"></i> Ссылка для импорта в приложение:</span>
+                        <div style="display: flex; background-color: var(--gray-light); padding: 2px; border-radius: 6px; border: 1px solid var(--border-color);">
+                            <button id="tab-legacy" class="btn btn-sm" style="padding: 4px 10px; font-size: 11px; border-radius: 4px; background-color: transparent; color: var(--text-muted); border: none; cursor: pointer;" onclick="switchDeeplinkVersion('1.0')">Legacy</button>
+                            <button id="tab-v2" class="btn btn-sm" style="padding: 4px 10px; font-size: 11px; border-radius: 4px; background-color: var(--primary); color: white; border: none; cursor: pointer;" onclick="switchDeeplinkVersion('2.0')">Amnezia 2.0</button>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 8px; width: 100%;">
+                        <input type="text" id="modal-deeplink-input" class="form-control" readonly style="background-color: var(--gray-light); font-family: monospace; font-size: 13px;">
+                        <button class="btn btn-primary btn-sm" onclick="copyDeeplinkToClipboard()" style="flex-shrink: 0; padding: 10px 16px;" title="Копировать ссылку"><i class="fa-solid fa-copy"></i></button>
+                        <a id="modal-deeplink-btn" href="#" class="btn btn-success btn-sm" style="flex-shrink: 0; padding: 10px 16px; background-color: var(--success); color: white; text-decoration: none;" title="Открыть в AmneziaVPN">
+                            <i class="fa-solid fa-up-right-from-square"></i> Импорт
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary btn-sm" onclick="closeConfigModal()">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function toggleCreateForm() {
+            const card = document.getElementById('create-client-card');
+            card.style.display = card.style.display === 'none' ? 'block' : 'none';
+            if (card.style.display === 'block') document.getElementById('name').focus();
+        }
+
+        if (new URLSearchParams(window.location.search).get('create') === 'true') toggleCreateForm();
+
+        let activeClientId = "";
+        let activeConfigText = "";
+        let activeDeeplinkLegacy = "";
+        let activeDeeplinkV2 = "";
+        let activeConfigTextSplit = "";
+        let activeDeeplinkSplitLegacy = "";
+        let activeDeeplinkSplitV2 = "";
+        let currentMode = "full";
+        let currentVersion = "2.0";
+
+        function openConfigModal(clientId) {
+            const dataEl = document.getElementById('data-' + clientId);
+            if (!dataEl) return;
+            const clientData = JSON.parse(dataEl.textContent);
+            activeClientId = clientId;
+            activeConfigText = clientData.config_text;
+            activeDeeplinkLegacy = clientData.deep_link || "";
+            activeDeeplinkV2 = clientData.deep_link_v2 || "";
+            activeConfigTextSplit = clientData.config_text_split || "";
+            activeDeeplinkSplitLegacy = clientData.deep_link_split || "";
+            activeDeeplinkSplitV2 = clientData.deep_link_split_v2 || "";
+            currentMode = "full";
+            currentVersion = "2.0";
+            document.getElementById('modal-title-text').innerText = 'Конфигурация VPN: ' + clientData.name;
+            updateModalUI();
+            document.getElementById('config-modal').classList.add('active');
+        }
+
+        function paintToggle(active, inactive) {
+            active.style.backgroundColor = "var(--primary)";
+            active.style.color = "white";
+            inactive.style.backgroundColor = "transparent";
+            inactive.style.color = "var(--text-muted)";
+        }
+
+        function updateModalUI() {
+            const configPreview = document.getElementById('modal-config-text');
+            const downloadBtn = document.getElementById('modal-download-link');
+            const qrImg = document.getElementById('modal-qr-img');
+            const deeplinkInput = document.getElementById('modal-deeplink-input');
+            const deeplinkBtn = document.getElementById('modal-deeplink-btn');
+            const tabLegacy = document.getElementById('tab-legacy');
+            const tabV2 = document.getElementById('tab-v2');
+            const toggleFull = document.getElementById('toggle-mode-full');
+            const toggleSplit = document.getElementById('toggle-mode-split');
+
+            currentMode === "full" ? paintToggle(toggleFull, toggleSplit) : paintToggle(toggleSplit, toggleFull);
+            currentVersion === "1.0" ? paintToggle(tabLegacy, tabV2) : paintToggle(tabV2, tabLegacy);
+
+            const configText = currentMode === "full" ? activeConfigText : activeConfigTextSplit;
+            const link = currentMode === "full"
+                ? (currentVersion === "1.0" ? activeDeeplinkLegacy : activeDeeplinkV2)
+                : (currentVersion === "1.0" ? activeDeeplinkSplitLegacy : activeDeeplinkSplitV2);
+
+            configPreview.innerText = configText;
+            const downloadParams = new URLSearchParams();
+            downloadParams.set('version', currentVersion);
+            if (currentMode === "split") downloadParams.set('split', 'true');
+            downloadBtn.href = '/clients/' + activeClientId + '/download?' + downloadParams.toString();
+
+            const qrParams = new URLSearchParams();
+            qrParams.set('version', currentVersion);
+            qrParams.set('_', Date.now().toString());
+            if (currentMode === "split") qrParams.set('split', 'true');
+            qrImg.src = '/clients/' + activeClientId + '/qr?' + qrParams.toString();
+
+            deeplinkInput.value = link || "Не удалось сгенерировать ссылку";
+            deeplinkBtn.href = link || "#";
+            deeplinkBtn.style.pointerEvents = link ? 'auto' : 'none';
+            deeplinkBtn.style.opacity = link ? '1' : '0.5';
+        }
+
+        function switchRoutingMode(mode) {
+            currentMode = mode;
+            updateModalUI();
+        }
+
+        function switchDeeplinkVersion(version) {
+            currentVersion = version;
+            updateModalUI();
+        }
+
+        function copyTextToClipboard(text, successMessage) {
+            if (!text) return;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => alert(successMessage), () => fallbackCopyTextToClipboard(text, successMessage));
+            } else {
+                fallbackCopyTextToClipboard(text, successMessage);
+            }
+        }
+
+        function fallbackCopyTextToClipboard(text, successMessage) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";
+            textArea.style.opacity = "0";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            alert(document.execCommand('copy') ? successMessage : 'Не удалось скопировать. Скопируйте текст вручную.');
+            document.body.removeChild(textArea);
+        }
+
+        function copyConfigToClipboard() {
+            copyTextToClipboard(currentMode === "full" ? activeConfigText : activeConfigTextSplit, 'Конфиг скопирован.');
+        }
+
+        function copyDeeplinkToClipboard() {
+            const link = currentMode === "full"
+                ? (currentVersion === "1.0" ? activeDeeplinkLegacy : activeDeeplinkV2)
+                : (currentVersion === "1.0" ? activeDeeplinkSplitLegacy : activeDeeplinkSplitV2);
+            copyTextToClipboard(link, 'Ссылка импорта скопирована.');
+        }
+
+        function closeConfigModal() {
+            document.getElementById('config-modal').classList.remove('active');
+        }
+
+        window.onclick = function(event) {
+            const modal = document.getElementById('config-modal');
+            if (event.target === modal) closeConfigModal();
+        }
+    </script>
+</body>
+</html>
+
+
