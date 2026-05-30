@@ -226,13 +226,7 @@ async def download_client_qr(client_id: str, split: bool = False, version: str =
     else:
         config_text = generate_client_config(client['ip_address'], client['private_key'], split_tunnel=split, preshared_key=client['preshared_key'])
 
-    qr_payload = generate_amnezia_deeplink(
-        config_text,
-        version="2.0" if version == "2.0" else "1.0",
-        client_public_key=client['public_key'],
-        split_tunnel=split,
-        client_name=client['name'],
-    ) or config_text
+    qr_payload = config_text
     
     import io
     qr = qrcode.QRCode(version=1, box_size=10, border=3)
