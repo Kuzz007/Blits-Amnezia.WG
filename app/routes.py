@@ -193,11 +193,19 @@ async def download_client_conf(client_id: str, split: bool = False, version: str
     else:
         config_text = generate_client_config(client['ip_address'], client['private_key'], split_tunnel=split, preshared_key=client['preshared_key'])
     
+    import urllib.parse
     from fastapi import Response
+    
+    content_disposition_filename = urllib.parse.quote(filename)
+    if content_disposition_filename != filename:
+        disposition = f"attachment; filename*=utf-8''{content_disposition_filename}"
+    else:
+        disposition = f'attachment; filename="{filename}"'
+        
     return Response(
         content=config_text,
         media_type="application/octet-stream",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        headers={"Content-Disposition": disposition}
     )
 
 @router.get("/clients/{client_id}/qr")
