@@ -746,6 +746,12 @@ def rebuild_and_sync_vpn_config():
                 logger.info(f"Сервис awg-quick@{AWG_INTERFACE} перезапущен.")
             except Exception as se:
                 logger.error(f"Ошибка перезапуска сервиса awg-quick@{AWG_INTERFACE}: {se}")
+                if not os.path.exists(f"/sys/class/net/{AWG_INTERFACE}"):
+                    try:
+                        subprocess.run(["awg-quick", "up", str(target_config_file)], check=True)
+                        logger.info(f"Интерфейс {AWG_INTERFACE} поднят через awg-quick up.")
+                    except Exception as up_exc:
+                        logger.error(f"Не удалось поднять интерфейс {AWG_INTERFACE} через awg-quick up: {up_exc}")
 
 # Оптимизированный список диапазонов IP-адресов зарубежных и заблокированных сервисов
 # (Instagram, Facebook, Twitter, Google, YouTube, ChatGPT/OpenAI, Claude, Cloudflare, Fastly и др.)
@@ -836,6 +842,12 @@ def rebuild_and_sync_legacy_vpn_config():
                 subprocess.run(["systemctl", "restart", f"awg-quick@{LEGACY_INTERFACE}"], check=True)
             except Exception as se:
                 logger.error(f"Legacy restart failed: {se}")
+                if not os.path.exists(f"/sys/class/net/{LEGACY_INTERFACE}"):
+                    try:
+                        subprocess.run(["awg-quick", "up", str(LEGACY_CONFIG_FILE)], check=True)
+                        logger.info(f"Legacy interface {LEGACY_INTERFACE} started with awg-quick up.")
+                    except Exception as up_exc:
+                        logger.error(f"Legacy awg-quick up failed: {up_exc}")
 
 _original_rebuild_and_sync_vpn_config = rebuild_and_sync_vpn_config
 

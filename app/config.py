@@ -30,7 +30,10 @@ JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 часа
 
 # Токен авторизации для API Telegram-бота
-TELEGRAM_API_TOKEN = os.getenv("TELEGRAM_API_TOKEN", "tg_bearer_token_default_value_change_it")
+TELEGRAM_API_TOKEN = os.getenv(
+    "TELEGRAM_API_TOKEN",
+    os.getenv("API_TOKEN", "tg_bearer_token_default_value_change_it"),
+)
 
 # Параметры AmneziaWG
 AWG_INTERFACE = os.getenv("AWG_INTERFACE", "awg0")

@@ -4,6 +4,9 @@
 # -------------------------------------------------------------------------
 set -e
 
+REPO_ARCHIVE_URL="${BLITZ_REPO_ARCHIVE_URL:-https://github.com/kuznecovpasa807-ui/Blits-Amnezia.WG/archive/refs/heads/main.tar.gz}"
+INSTALL_DIR="${BLITZ_INSTALL_DIR:-/opt/blitz-amnezia-panel}"
+
 # Цвета для вывода в терминал
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -12,6 +15,32 @@ BLUE='\033[0;34m'
 PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
+
+ensure_project_files() {
+    if [ -f "./docker-compose.yml" ] && [ -f "./Dockerfile" ] && [ -d "./app" ] && [ -f "./install_amneziawg.sh" ]; then
+        echo -e "${GREEN}Файлы проекта найдены в текущей папке: $(pwd)${NC}"
+        return
+    fi
+
+    echo -e "${YELLOW}Файлы проекта рядом с install.sh не найдены. Скачиваем свежую версию с GitHub...${NC}"
+    apt-get update
+    apt-get install -y ca-certificates curl tar
+
+    tmp_dir="$(mktemp -d)"
+    mkdir -p "$INSTALL_DIR"
+    curl -fsSL "$REPO_ARCHIVE_URL" -o "$tmp_dir/repo.tar.gz"
+    tar -xzf "$tmp_dir/repo.tar.gz" -C "$tmp_dir"
+    src_dir="$(find "$tmp_dir" -mindepth 1 -maxdepth 1 -type d | head -n1)"
+    if [ -z "$src_dir" ] || [ ! -d "$src_dir" ]; then
+        echo -e "${RED}Ошибка: не удалось распаковать архив проекта.${NC}" >&2
+        exit 1
+    fi
+
+    cp -a "$src_dir/." "$INSTALL_DIR/"
+    rm -rf "$tmp_dir"
+    cd "$INSTALL_DIR"
+    echo -e "${GREEN}Проект скачан в $INSTALL_DIR${NC}"
+}
 
 clear 2>/dev/null || true
 echo -e "${PURPLE}"
@@ -47,6 +76,8 @@ else
         exit 1
     fi
 fi
+
+ensure_project_files
 
 # Шаг 3. Установка системных зависимостей хоста (Docker и AmneziaWG)
 echo -e "\n${BLUE}[1/5] Проверка и установка Docker & Docker Compose...${NC}"
@@ -144,8 +175,22 @@ if [ "$DOMAIN_MODE" = false ]; then
     PANEL_PORT=80 # В режиме IP вешаем панель напрямую на 80 веб-порт
 fi
 
-# Записываем порт в файл окружения
-echo "PANEL_PORT=$PANEL_PORT" > data/panel.env
+# Записываем порт и секреты в файл окружения до запуска контейнера
+if ! command -v openssl >/dev/null 2>&1; then
+    apt-get update
+    apt-get install -y openssl
+fi
+EXISTING_BOT_TOKEN="$(grep -E '^TELEGRAM_API_TOKEN=' data/panel.env 2>/dev/null | tail -n1 | cut -d= -f2- || true)"
+BOT_TOKEN="${EXISTING_BOT_TOKEN:-awg_bot_api_token_$(openssl rand -hex 16)}"
+SECRET_KEY_VALUE="$(grep -E '^SECRET_KEY=' data/panel.env 2>/dev/null | tail -n1 | cut -d= -f2- || true)"
+SECRET_KEY_VALUE="${SECRET_KEY_VALUE:-$(openssl rand -hex 32)}"
+{
+    echo "PANEL_PORT=$PANEL_PORT"
+    echo "TELEGRAM_API_TOKEN=$BOT_TOKEN"
+    echo "API_TOKEN=$BOT_TOKEN"
+    echo "SECRET_KEY=$SECRET_KEY_VALUE"
+} > data/panel.env
+chmod 600 data/panel.env
 
 # Шаг 5. Интерактивный опрос: Настройка пароля администратора
 echo -e "\n${BLUE}[4/5] Настройка пароля администратора:${NC}"
@@ -191,16 +236,22 @@ else
     docker compose up -d --build
 fi
 
+echo "Проверка и синхронизация VPN-интерфейсов Amnezia 2.0 и Legacy..."
+sleep 3
+docker exec amnezia-panel python3 -c "from app.vpn_manager import rebuild_and_sync_vpn_config; rebuild_and_sync_vpn_config()" || true
+
 # Шаг 7. Применение кастомного пароля в БД (если был выбран)
 if [[ -n "$CUSTOM_PASS" ]]; then
     echo "Применение настроенного вами пароля администратора..."
     # Даем базе данных и контейнеру 3 секунды на инициализацию
     sleep 3
     
-    docker exec amnezia-panel python3 -c "
+    docker exec -e ADMIN_PASSWORD="$CUSTOM_PASS" amnezia-panel python3 -c "
+import os
 import sqlite3, bcrypt
 conn = sqlite3.connect('/app/data/panel.db')
-h = bcrypt.hashpw(b'$custom_pass', bcrypt.gensalt()).decode('utf-8')
+password = os.environ['ADMIN_PASSWORD'].encode('utf-8')
+h = bcrypt.hashpw(password, bcrypt.gensalt()).decode('utf-8')
 conn.execute('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE username = \"admin\"', (h,))
 conn.commit()
 conn.close()
@@ -231,10 +282,6 @@ else
 fi
 echo ""
 echo -e "Для API-интеграции с Telegram-ботом используйте Bearer Token:"
-# Сгенерируем случайный токен для бота и выведем его пользователю
-BOT_TOKEN="awg_bot_api_token_$(openssl rand -hex 16)"
-# Сохраняем токен в файле настроек .env
-echo "API_TOKEN=$BOT_TOKEN" >> data/panel.env
 echo -e "  🤖  ${YELLOW}$BOT_TOKEN${NC}"
 echo ""
 echo -e "Служба панели работает стабильно в Docker-контейнере."

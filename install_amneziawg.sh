@@ -86,6 +86,22 @@ fi
 
 SERVER_PRIVATE_KEY=$(cat "$PRIVATE_KEY_FILE")
 SERVER_PUBLIC_KEY=$(cat "$PUBLIC_KEY_FILE")
+LEGACY_PRIVATE_KEY_FILE="/etc/amnezia/amneziawg/server_legacy.key"
+LEGACY_PUBLIC_KEY_FILE="/etc/amnezia/amneziawg/server_legacy.pub"
+LEGACY_INTERFACE="awg_legacy"
+LEGACY_CONFIG_FILE="/etc/amnezia/amneziawg/${LEGACY_INTERFACE}.conf"
+LEGACY_PORT="43913"
+
+if [ ! -f "$LEGACY_PRIVATE_KEY_FILE" ]; then
+  echo "Генерация отдельного ключа сервера для Amnezia Legacy..."
+  awg genkey | tee "$LEGACY_PRIVATE_KEY_FILE" | awg pubkey > "$LEGACY_PUBLIC_KEY_FILE"
+  chmod 600 "$LEGACY_PRIVATE_KEY_FILE"
+else
+  echo "Legacy-ключи сервера уже существуют. Используем существующие."
+fi
+
+LEGACY_PRIVATE_KEY=$(cat "$LEGACY_PRIVATE_KEY_FILE")
+LEGACY_PUBLIC_KEY=$(cat "$LEGACY_PUBLIC_KEY_FILE")
 
 # Создание базового конфига awg0.conf
 CONFIG_FILE="/etc/amnezia/amneziawg/awg0.conf"
@@ -99,14 +115,16 @@ PrivateKey = $SERVER_PRIVATE_KEY
 
 # Параметры маскировки AmneziaWG (Junk Packet Parameters)
 Jc = 4
-Jmin = 40
-Jmax = 70
-S1 = 15
-S2 = 97
-H1 = 394850
-H2 = 983475
-H3 = 129485
-H4 = 847592
+Jmin = 10
+Jmax = 50
+S1 = 61
+S2 = 34
+S3 = 21
+S4 = 2
+H1 = 906396796-1598714541
+H2 = 2056848576-2126223526
+H3 = 2141047196-2144456894
+H4 = 2146243463-2147170402
 
 PostUp = iptables -t nat -A POSTROUTING -o $DEFAULT_INTERFACE -j MASQUERADE; ip6tables -t nat -A POSTROUTING -o $DEFAULT_INTERFACE -j MASQUERADE; iptables -A FORWARD -i awg0 -j ACCEPT; ip6tables -A FORWARD -i awg0 -j ACCEPT
 PostDown = iptables -t nat -D POSTROUTING -o $DEFAULT_INTERFACE -j MASQUERADE; ip6tables -t nat -D POSTROUTING -o $DEFAULT_INTERFACE -j MASQUERADE; iptables -D FORWARD -i awg0 -j ACCEPT; ip6tables -D FORWARD -i awg0 -j ACCEPT
@@ -117,11 +135,43 @@ else
   echo "Конфигурационный файл $CONFIG_FILE уже существует. Пропускаем создание."
 fi
 
+# Создание отдельного базового конфига для Amnezia 1 / Legacy.
+# Legacy намеренно не содержит S3/S4/I*-параметры, поэтому ему нужен отдельный порт и интерфейс.
+if [ ! -f "$LEGACY_CONFIG_FILE" ]; then
+  echo "Создание Legacy-конфигурации $LEGACY_CONFIG_FILE..."
+  cat > "$LEGACY_CONFIG_FILE" <<EOF
+[Interface]
+Address = 10.66.67.1/24
+ListenPort = $LEGACY_PORT
+PrivateKey = $LEGACY_PRIVATE_KEY
+
+# Legacy AmneziaWG: базовая обфускация без параметров Amnezia 2.0
+Jc = 4
+Jmin = 10
+Jmax = 50
+S1 = 61
+S2 = 34
+H1 = 906396796-1598714541
+H2 = 2056848576-2126223526
+H3 = 2141047196-2144456894
+H4 = 2146243463-2147170402
+
+PostUp = iptables -t nat -A POSTROUTING -o $DEFAULT_INTERFACE -j MASQUERADE; iptables -A FORWARD -i $LEGACY_INTERFACE -j ACCEPT
+PostDown = iptables -t nat -D POSTROUTING -o $DEFAULT_INTERFACE -j MASQUERADE; iptables -D FORWARD -i $LEGACY_INTERFACE -j ACCEPT
+EOF
+  chmod 600 "$LEGACY_CONFIG_FILE"
+  echo "Legacy-конфиг успешно создан."
+else
+  echo "Legacy-конфигурационный файл $LEGACY_CONFIG_FILE уже существует. Пропускаем создание."
+fi
+
 # Настройка правил брандмауэра UFW, если он включен
 if ufw status | grep -q "Status: active"; then
   echo "UFW активен. Добавляем разрешение для UDP порта 51820..."
   ufw allow 51820/udp
+  ufw allow ${LEGACY_PORT}/udp
   ufw route allow in on awg0
+  ufw route allow in on $LEGACY_INTERFACE
   ufw reload
 fi
 
@@ -129,6 +179,10 @@ fi
 echo "Включение и запуск сервиса awg-quick@awg0..."
 systemctl enable awg-quick@awg0 || echo "Предупреждение: Не удалось включить автозапуск awg-quick@awg0."
 systemctl restart awg-quick@awg0 || echo "Предупреждение: Не удалось перезапустить awg-quick@awg0 (может потребоваться перезагрузка)."
+echo "Включение и запуск сервиса awg-quick@${LEGACY_INTERFACE}..."
+systemctl enable "awg-quick@${LEGACY_INTERFACE}" || echo "Предупреждение: Не удалось включить автозапуск awg-quick@${LEGACY_INTERFACE}."
+systemctl restart "awg-quick@${LEGACY_INTERFACE}" || echo "Предупреждение: Не удалось перезапустить awg-quick@${LEGACY_INTERFACE}."
 
 echo "=== УСТАНОВКА И НАСТРОЙКА AMNEZIAWG ЗАВЕРШЕНА ==="
 echo "Публичный ключ сервера: $SERVER_PUBLIC_KEY"
+echo "Публичный Legacy-ключ сервера: $LEGACY_PUBLIC_KEY"
