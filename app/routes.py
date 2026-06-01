@@ -1167,26 +1167,54 @@ async def panel_settings_page(
 @router.post("/settings/panel", response_class=HTMLResponse)
 async def save_panel_settings(
     request: Request,
-    panel_port: str = Form(...),
-    panel_domain: str = Form(""),
-    panel_theme: str = Form("light"),
-    panel_language: str = Form("ru"),
     telegram_notifications_enabled: str = Form("0"),
     telegram_admin_bot_token: str = Form(""),
     telegram_admin_chat_id: str = Form(""),
     user: dict = Depends(check_password_change_required)
 ):
-    from app.vpn_manager import get_vpn_setting
-
     success_msg = None
     error_msg = None
-    port_value = panel_port.strip()
-    domain_value = panel_domain.strip().lower()
-    theme_value = panel_theme.strip().lower()
-    language_value = panel_language.strip().lower()
+    port_value = get_panel_setting("panel_port", os.getenv("PANEL_PORT", "8080"))
+    domain_value = get_panel_setting("panel_domain", "")
+    theme_value = get_panel_setting("panel_theme", request.cookies.get("panel_theme", "light"))
+    language_value = get_panel_setting("panel_language", request.cookies.get("panel_lang", "ru"))
     telegram_enabled_value = "1" if telegram_notifications_enabled == "1" else "0"
     telegram_token_value = telegram_admin_bot_token.strip()
     telegram_chat_id_value = telegram_admin_chat_id.strip()
+
+    try:
+        set_panel_setting("telegram_notifications_enabled", telegram_enabled_value)
+        set_panel_setting("telegram_admin_bot_token", telegram_token_value)
+        set_panel_setting("telegram_admin_chat_id", telegram_chat_id_value)
+        success_msg = "Настройки Telegram сохранены."
+    except Exception as e:
+        logger.error(f"Не удалось сохранить настройки Telegram: {e}")
+        error_msg = str(e)
+
+    settings = {
+        "panel_port": port_value,
+        "panel_domain": domain_value,
+        "panel_theme": theme_value,
+        "panel_language": language_value,
+        "telegram_notifications_enabled": telegram_enabled_value,
+        "telegram_admin_bot_token": telegram_token_value,
+        "telegram_admin_chat_id": telegram_chat_id_value,
+        "public_ip": SERVER_PUBLIC_IP,
+    }
+    response = templates.TemplateResponse(
+        request=request,
+        name="panel_settings.html",
+        context={
+            "user": user,
+            "settings": settings,
+            "success": success_msg,
+            "error": error_msg,
+            "current_page": "panel_settings"
+        }
+    )
+    response.set_cookie("panel_theme", theme_value, max_age=60 * 60 * 24 * 365, samesite="lax")
+    response.set_cookie("panel_lang", language_value, max_age=60 * 60 * 24 * 365, samesite="lax")
+    return response
 
     try:
         port_value = _validated_int_setting("Порт панели", port_value, 1, 65535)
@@ -1260,6 +1288,20 @@ async def save_panel_theme(
     set_panel_setting("panel_theme", theme_value)
     response = JSONResponse({"status": "ok", "theme": theme_value})
     response.set_cookie("panel_theme", theme_value, max_age=60 * 60 * 24 * 365, samesite="lax")
+    return response
+
+@router.post("/settings/panel/language")
+async def save_panel_language(
+    panel_language: str = Form(...),
+    user: dict = Depends(check_password_change_required)
+):
+    language_value = panel_language.strip().lower()
+    if language_value not in {"ru", "en"}:
+        raise HTTPException(status_code=400, detail="Panel language must be ru or en")
+
+    set_panel_setting("panel_language", language_value)
+    response = JSONResponse({"status": "ok", "language": language_value})
+    response.set_cookie("panel_lang", language_value, max_age=60 * 60 * 24 * 365, samesite="lax")
     return response
 
 @router.get("/settings/api", response_class=HTMLResponse)

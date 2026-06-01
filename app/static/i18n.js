@@ -28,6 +28,7 @@
         'Администратор': 'Administrator',
         'Главный admin': 'Main admin',
         'Сохранить': 'Save',
+        'Сохранить Telegram': 'Save Telegram',
         'Отмена': 'Cancel',
         'Закрыть': 'Close',
         'Обновить': 'Refresh',
@@ -120,6 +121,7 @@
         'Ошибка:': 'Error:',
         'Внимание.': 'Warning.',
         'Настройки сохранены, конфигурация AmneziaWG обновлена.': 'Settings saved, AmneziaWG configuration updated.',
+        'Настройки Telegram сохранены.': 'Telegram settings saved.',
         'Используется стандартный пароль admin/admin.': 'The default admin/admin password is still in use.',
         'Сменить сейчас': 'Change now',
 
