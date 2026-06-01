@@ -531,7 +531,7 @@
 
             const hint = document.createElement('span');
             hint.className = 'qr-step-hint';
-            hint.textContent = 'Автосмена каждые 6 сек';
+            hint.textContent = '2 сек';
 
             controls.appendChild(prev);
             controls.appendChild(hint);
@@ -547,7 +547,7 @@
             qrTimers[stateKey] = setInterval(() => {
                 qrSeriesState[stateKey] = ((qrSeriesState[stateKey] || 0) + 1) % series.count;
                 drawQrPart(container, series, stateKey);
-            }, 6000);
+            }, 2000);
         }
 
         function restartQrRotation(container, series, stateKey) {
