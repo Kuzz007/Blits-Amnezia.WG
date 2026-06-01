@@ -156,11 +156,11 @@ install_certbot_ip() {
         return
     fi
 
-    apt-get update
-    apt-get install -y python3 python3-venv python3-pip openssl curl
-    python3 -m venv /opt/blits-certbot
-    /opt/blits-certbot/bin/pip install --upgrade pip
-    /opt/blits-certbot/bin/pip install --upgrade "certbot>=5.4"
+    apt-get update >&2
+    apt-get install -y python3 python3-venv python3-pip openssl curl >&2
+    python3 -m venv /opt/blits-certbot >&2
+    /opt/blits-certbot/bin/pip install --upgrade pip >&2
+    /opt/blits-certbot/bin/pip install --upgrade "certbot>=5.4" >&2
     echo "$certbot_bin"
 }
 
