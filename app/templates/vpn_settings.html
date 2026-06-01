@@ -109,6 +109,8 @@
                                 Эти параметры должны совпадать на сервере и в ключах клиентов.
                             </p>
                             <div style="display: flex; flex-direction: column; gap: 16px;">
+                                <div style="padding: 16px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-main);">
+                                    <h4 style="font-size: 14px; font-weight: 700; margin-bottom: 12px; color: var(--dark);">Amnezia 2.0</h4>
                                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px;">
                                     <div class="form-group" style="margin-bottom: 0;">
                                         <label for="jc">Jc</label>
@@ -155,6 +157,53 @@
                                     <div class="form-group" style="margin-bottom: 0;">
                                         <label for="h4">H4</label>
                                         <input type="text" id="h4" name="h4" class="form-control" value="{{ settings.h4 }}" required>
+                                    </div>
+                                </div>
+                                </div>
+                                <div style="padding: 16px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-main);">
+                                    <h4 style="font-size: 14px; font-weight: 700; margin-bottom: 12px; color: var(--dark);">Amnezia 1 / Legacy</h4>
+                                    <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
+                                        Legacy использует свои значения маскировки. S3/S4 здесь не показываются, потому что конфиг Amnezia 1 не должен их содержать.
+                                    </p>
+                                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px;">
+                                        <div class="form-group" style="margin-bottom: 0;">
+                                            <label for="legacy_jc">Jc</label>
+                                            <input type="number" id="legacy_jc" name="legacy_jc" class="form-control" value="{{ settings.legacy_jc }}" required min="0" max="100">
+                                        </div>
+                                        <div class="form-group" style="margin-bottom: 0;">
+                                            <label for="legacy_jmin">Jmin</label>
+                                            <input type="number" id="legacy_jmin" name="legacy_jmin" class="form-control" value="{{ settings.legacy_jmin }}" required min="0" max="1200">
+                                        </div>
+                                        <div class="form-group" style="margin-bottom: 0;">
+                                            <label for="legacy_jmax">Jmax</label>
+                                            <input type="number" id="legacy_jmax" name="legacy_jmax" class="form-control" value="{{ settings.legacy_jmax }}" required min="0" max="1200">
+                                        </div>
+                                        <div class="form-group" style="margin-bottom: 0;">
+                                            <label for="legacy_s1">S1</label>
+                                            <input type="number" id="legacy_s1" name="legacy_s1" class="form-control" value="{{ settings.legacy_s1 }}" required min="0" max="1000">
+                                        </div>
+                                        <div class="form-group" style="margin-bottom: 0;">
+                                            <label for="legacy_s2">S2</label>
+                                            <input type="number" id="legacy_s2" name="legacy_s2" class="form-control" value="{{ settings.legacy_s2 }}" required min="0" max="1000">
+                                        </div>
+                                    </div>
+                                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-top: 12px;">
+                                        <div class="form-group" style="margin-bottom: 0;">
+                                            <label for="legacy_h1">H1</label>
+                                            <input type="text" id="legacy_h1" name="legacy_h1" class="form-control" value="{{ settings.legacy_h1 }}" required>
+                                        </div>
+                                        <div class="form-group" style="margin-bottom: 0;">
+                                            <label for="legacy_h2">H2</label>
+                                            <input type="text" id="legacy_h2" name="legacy_h2" class="form-control" value="{{ settings.legacy_h2 }}" required>
+                                        </div>
+                                        <div class="form-group" style="margin-bottom: 0;">
+                                            <label for="legacy_h3">H3</label>
+                                            <input type="text" id="legacy_h3" name="legacy_h3" class="form-control" value="{{ settings.legacy_h3 }}" required>
+                                        </div>
+                                        <div class="form-group" style="margin-bottom: 0;">
+                                            <label for="legacy_h4">H4</label>
+                                            <input type="text" id="legacy_h4" name="legacy_h4" class="form-control" value="{{ settings.legacy_h4 }}" required>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

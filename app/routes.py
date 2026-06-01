@@ -887,6 +887,15 @@ async def vpn_settings_page(
         "h2": get_vpn_setting("h2", "2056848576-2126223526"),
         "h3": get_vpn_setting("h3", "2141047196-2144456894"),
         "h4": get_vpn_setting("h4", "2146243463-2147170402"),
+        "legacy_jc": get_vpn_setting("legacy_jc", get_vpn_setting("jc", "4")),
+        "legacy_jmin": get_vpn_setting("legacy_jmin", get_vpn_setting("jmin", "10")),
+        "legacy_jmax": get_vpn_setting("legacy_jmax", get_vpn_setting("jmax", "50")),
+        "legacy_s1": get_vpn_setting("legacy_s1", get_vpn_setting("s1", "61")),
+        "legacy_s2": get_vpn_setting("legacy_s2", get_vpn_setting("s2", "34")),
+        "legacy_h1": get_vpn_setting("legacy_h1", get_vpn_setting("h1", "906396796-1598714541")),
+        "legacy_h2": get_vpn_setting("legacy_h2", get_vpn_setting("h2", "2056848576-2126223526")),
+        "legacy_h3": get_vpn_setting("legacy_h3", get_vpn_setting("h3", "2141047196-2144456894")),
+        "legacy_h4": get_vpn_setting("legacy_h4", get_vpn_setting("h4", "2146243463-2147170402")),
         "split_tunnel_routes": get_split_tunnel_routes_text(),
         "split_tunnel_route_count": len(get_split_tunnel_routes())
     }
@@ -919,6 +928,15 @@ async def save_vpn_settings(
     h2: str = Form(...),
     h3: str = Form(...),
     h4: str = Form(...),
+    legacy_jc: str = Form(...),
+    legacy_jmin: str = Form(...),
+    legacy_jmax: str = Form(...),
+    legacy_s1: str = Form(...),
+    legacy_s2: str = Form(...),
+    legacy_h1: str = Form(...),
+    legacy_h2: str = Form(...),
+    legacy_h3: str = Form(...),
+    legacy_h4: str = Form(...),
     split_tunnel_routes: str = Form(""),
     user: dict = Depends(check_password_change_required)
 ):
@@ -935,8 +953,15 @@ async def save_vpn_settings(
         s2_value = _validated_int_setting("S2", s2, 0, 1000)
         s3_value = _validated_int_setting("S3", s3, 0, 1000)
         s4_value = _validated_int_setting("S4", s4, 0, 1000)
+        legacy_jc_value = _validated_int_setting("Legacy Jc", legacy_jc, 0, 100)
+        legacy_jmin_value = _validated_int_setting("Legacy Jmin", legacy_jmin, 0, 1200)
+        legacy_jmax_value = _validated_int_setting("Legacy Jmax", legacy_jmax, 0, 1200)
+        legacy_s1_value = _validated_int_setting("Legacy S1", legacy_s1, 0, 1000)
+        legacy_s2_value = _validated_int_setting("Legacy S2", legacy_s2, 0, 1000)
         if int(jmin_value) > int(jmax_value):
             raise ValueError("Jmin не может быть больше Jmax")
+        if int(legacy_jmin_value) > int(legacy_jmax_value):
+            raise ValueError("Legacy Jmin не может быть больше Legacy Jmax")
         if port_value == legacy_port_value:
             raise ValueError("Порты Amnezia 2.0 и Legacy должны быть разными")
 
@@ -955,6 +980,15 @@ async def save_vpn_settings(
         set_vpn_setting("h2", h2.strip())
         set_vpn_setting("h3", h3.strip())
         set_vpn_setting("h4", h4.strip())
+        set_vpn_setting("legacy_jc", legacy_jc_value)
+        set_vpn_setting("legacy_jmin", legacy_jmin_value)
+        set_vpn_setting("legacy_jmax", legacy_jmax_value)
+        set_vpn_setting("legacy_s1", legacy_s1_value)
+        set_vpn_setting("legacy_s2", legacy_s2_value)
+        set_vpn_setting("legacy_h1", legacy_h1.strip())
+        set_vpn_setting("legacy_h2", legacy_h2.strip())
+        set_vpn_setting("legacy_h3", legacy_h3.strip())
+        set_vpn_setting("legacy_h4", legacy_h4.strip())
         set_split_tunnel_routes_text(split_tunnel_routes)
         
         # Пересборка конфигов сервера и перезапуск интерфейса VPN
@@ -982,6 +1016,15 @@ async def save_vpn_settings(
         "h2": h2,
         "h3": h3,
         "h4": h4,
+        "legacy_jc": legacy_jc,
+        "legacy_jmin": legacy_jmin,
+        "legacy_jmax": legacy_jmax,
+        "legacy_s1": legacy_s1,
+        "legacy_s2": legacy_s2,
+        "legacy_h1": legacy_h1,
+        "legacy_h2": legacy_h2,
+        "legacy_h3": legacy_h3,
+        "legacy_h4": legacy_h4,
         "split_tunnel_routes": split_tunnel_routes,
         "split_tunnel_route_count": len(get_split_tunnel_routes())
     }
