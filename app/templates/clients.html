@@ -324,7 +324,7 @@
                     </div>
                     <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;">
                         <span style="font-weight: 600; font-size: 14px; text-align: center;">QR-коды для AmneziaVPN</span>
-                        <p style="margin: 0; font-size: 12px; color: var(--text-muted); text-align: center;">Сканируй все части одной версии по порядку.</p>
+                        <p style="margin: 0; font-size: 12px; color: var(--text-muted); text-align: center;">Нажми показать, затем сканируй части по кругу.</p>
                         <div style="display: grid; grid-template-columns: repeat(2, minmax(130px, 1fr)); gap: 10px; width: 100%; max-width: 460px;">
                             <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
                                 <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">Legacy</span>
@@ -382,6 +382,7 @@
         let currentMode = "full";
         let currentVersion = "2.0";
         let qrSeriesState = {};
+        let qrTimers = {};
 
         function openConfigModal(clientId) {
             const dataEl = document.getElementById('data-' + clientId);
@@ -397,6 +398,7 @@
             currentMode = "full";
             currentVersion = "2.0";
             qrSeriesState = {};
+            stopQrRotation();
             document.getElementById('modal-title-text').innerText = 'Конфигурация VPN: ' + clientData.name;
             updateModalUI();
             document.getElementById('config-modal').classList.add('active');
@@ -433,8 +435,8 @@
             if (currentMode === "split") downloadParams.set('split', 'true');
             downloadBtn.href = '/clients/' + activeClientId + '/download?' + downloadParams.toString();
 
-            renderQrSeries('1.0', 'modal-qr-series-legacy');
-            renderQrSeries('2.0', 'modal-qr-series-v2');
+            resetQrButton('1.0', 'modal-qr-series-legacy');
+            resetQrButton('2.0', 'modal-qr-series-v2');
 
             deeplinkInput.value = link || "Не удалось сгенерировать ссылку";
             deeplinkBtn.href = link || "#";
@@ -460,9 +462,27 @@
                 const currentIndex = Math.min(qrSeriesState[stateKey] || 0, Math.max(series.count - 1, 0));
                 qrSeriesState[stateKey] = currentIndex;
                 drawQrPart(container, series, stateKey);
+                startQrRotation(container, series, stateKey);
             } catch (error) {
                 container.innerHTML = '<span class="qr-loading">' + t('QR недоступен') + '</span>';
             }
+        }
+
+        function resetQrButton(version, containerId) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            const label = version === '1.0' ? 'Legacy QR' : 'Amnezia 2.0 QR';
+            container.innerHTML = '';
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'btn btn-primary btn-sm qr-show-btn';
+            button.innerHTML = '<i class="fa-solid fa-qrcode"></i> Показать QR';
+            button.onclick = () => renderQrSeries(version, containerId);
+            const hint = document.createElement('span');
+            hint.className = 'qr-loading';
+            hint.textContent = label;
+            container.appendChild(button);
+            container.appendChild(hint);
         }
 
         function drawQrPart(container, series, stateKey) {
@@ -491,10 +511,10 @@
             prev.type = 'button';
             prev.className = 'qr-nav-btn';
             prev.innerHTML = '<i class="fa-solid fa-chevron-left"></i>';
-            prev.disabled = index === 0;
             prev.title = 'Предыдущий QR';
             prev.onclick = () => {
-                qrSeriesState[stateKey] = Math.max(0, index - 1);
+                qrSeriesState[stateKey] = (index - 1 + count) % count;
+                restartQrRotation(container, series, stateKey);
                 drawQrPart(container, series, stateKey);
             };
 
@@ -502,16 +522,16 @@
             next.type = 'button';
             next.className = 'qr-nav-btn';
             next.innerHTML = '<i class="fa-solid fa-chevron-right"></i>';
-            next.disabled = index >= count - 1;
             next.title = 'Следующий QR';
             next.onclick = () => {
-                qrSeriesState[stateKey] = Math.min(count - 1, index + 1);
+                qrSeriesState[stateKey] = (index + 1) % count;
+                restartQrRotation(container, series, stateKey);
                 drawQrPart(container, series, stateKey);
             };
 
             const hint = document.createElement('span');
             hint.className = 'qr-step-hint';
-            hint.textContent = index < count - 1 ? 'После скана нажми дальше' : 'Последний QR';
+            hint.textContent = 'Автосмена каждые 6 сек';
 
             controls.appendChild(prev);
             controls.appendChild(hint);
@@ -521,9 +541,29 @@
             container.appendChild(controls);
         }
 
+        function startQrRotation(container, series, stateKey) {
+            clearInterval(qrTimers[stateKey]);
+            if ((series.count || 1) < 2) return;
+            qrTimers[stateKey] = setInterval(() => {
+                qrSeriesState[stateKey] = ((qrSeriesState[stateKey] || 0) + 1) % series.count;
+                drawQrPart(container, series, stateKey);
+            }, 6000);
+        }
+
+        function restartQrRotation(container, series, stateKey) {
+            clearInterval(qrTimers[stateKey]);
+            startQrRotation(container, series, stateKey);
+        }
+
+        function stopQrRotation() {
+            Object.values(qrTimers).forEach((timer) => clearInterval(timer));
+            qrTimers = {};
+        }
+
         function switchRoutingMode(mode) {
             currentMode = mode;
             qrSeriesState = {};
+            stopQrRotation();
             updateModalUI();
         }
 
@@ -565,6 +605,7 @@
         }
 
         function closeConfigModal() {
+            stopQrRotation();
             document.getElementById('config-modal').classList.remove('active');
         }
 
