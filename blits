@@ -38,7 +38,11 @@ set_env() {
 
 restart_panel() {
     cd "$APP_DIR"
-    docker compose up -d --build
+    if [ "$(get_env PANEL_HTTPS)" = "1" ]; then
+        docker compose --profile ssl up -d --build
+    else
+        docker compose up -d --build
+    fi
 }
 
 public_ip() {
@@ -46,15 +50,19 @@ public_ip() {
 }
 
 panel_url() {
-    local port web_path domain scheme host
+    local port web_path domain scheme host https
     port="$(get_env PANEL_PORT)"
     web_path="$(get_env PANEL_WEB_PATH)"
     domain="$(get_env PANEL_DOMAIN)"
+    https="$(get_env PANEL_HTTPS)"
     port="${port:-80}"
     web_path="${web_path:-/}"
     scheme="http"
+    if [ "$https" = "1" ]; then
+        scheme="https"
+    fi
     host="${domain:-$(public_ip)}"
-    if [ "$port" = "80" ]; then
+    if { [ "$scheme" = "http" ] && [ "$port" = "80" ]; } || { [ "$scheme" = "https" ] && [ "$port" = "443" ]; } || [ "$https" = "1" ]; then
         printf '%s://%s%s\n' "$scheme" "$host" "$web_path"
     else
         printf '%s://%s:%s%s\n' "$scheme" "$host" "$port" "$web_path"
@@ -67,6 +75,8 @@ show_status() {
     echo "Panel port: $(get_env PANEL_PORT)"
     echo "Domain: $(get_env PANEL_DOMAIN)"
     echo "Web path: $(get_env PANEL_WEB_PATH)"
+    echo "HTTPS: $(get_env PANEL_HTTPS)"
+    echo "Certificate name: $(get_env PANEL_CERT_NAME)"
     echo "API token: $(get_env TELEGRAM_API_TOKEN)"
     echo
     docker compose -f "$APP_DIR/docker-compose.yml" ps 2>/dev/null || true
@@ -139,6 +149,72 @@ regenerate_api_token() {
     echo "New API token: $token"
 }
 
+install_certbot_ip() {
+    local certbot_bin="/opt/blits-certbot/bin/certbot"
+    if [ -x "$certbot_bin" ] && "$certbot_bin" --version 2>/dev/null | grep -Eq 'certbot (5\.[4-9]|[6-9]\.)'; then
+        echo "$certbot_bin"
+        return
+    fi
+
+    apt-get update
+    apt-get install -y python3 python3-venv python3-pip openssl curl
+    python3 -m venv /opt/blits-certbot
+    /opt/blits-certbot/bin/pip install --upgrade pip
+    /opt/blits-certbot/bin/pip install --upgrade "certbot>=5.4"
+    echo "$certbot_bin"
+}
+
+write_nginx_conf() {
+    local cert_name="$1"
+    local upstream_port="$2"
+    sed -e "s/__DOMAIN__/${cert_name}/g" -e "s/__PORT__/${upstream_port}/g" "$APP_DIR/nginx.conf.template" > "$APP_DIR/nginx.conf"
+}
+
+install_renew_hook() {
+    local certbot_bin="$1"
+    cat >/usr/local/bin/blits-renew-ip-cert <<EOF
+#!/usr/bin/env bash
+set -e
+cd "$APP_DIR"
+docker stop nginx-proxy >/dev/null 2>&1 || true
+"$certbot_bin" renew --quiet
+docker compose --profile ssl up -d nginx-proxy
+EOF
+    chmod 0755 /usr/local/bin/blits-renew-ip-cert
+    cat >/etc/cron.d/blits-ip-cert-renew <<'EOF'
+17 */12 * * * root /usr/local/bin/blits-renew-ip-cert >/var/log/blits-renew-ip-cert.log 2>&1
+EOF
+}
+
+enable_ip_https() {
+    local ip email certbot_bin
+    ip="$(public_ip)"
+    read -rp "IP for certificate [$ip]: " input_ip
+    ip="${input_ip:-$ip}"
+    read -rp "Email for Let's Encrypt notices (empty = no email): " email
+
+    certbot_bin="$(install_certbot_ip)"
+    set_env PANEL_PORT "1010"
+    set_env PANEL_HTTPS "1"
+    set_env PANEL_CERT_NAME "$ip"
+    set_env PANEL_DOMAIN ""
+    write_nginx_conf "$ip" "1010"
+
+    docker stop nginx-proxy >/dev/null 2>&1 || true
+    docker stop amnezia-panel >/dev/null 2>&1 || true
+    systemctl stop nginx >/dev/null 2>&1 || true
+
+    if [ -n "$email" ]; then
+        "$certbot_bin" certonly --preferred-profile shortlived --standalone --ip-address "$ip" --cert-name "$ip" --non-interactive --agree-tos --email "$email"
+    else
+        "$certbot_bin" certonly --preferred-profile shortlived --standalone --ip-address "$ip" --cert-name "$ip" --non-interactive --agree-tos --register-unsafely-without-email
+    fi
+
+    install_renew_hook "$certbot_bin"
+    restart_panel
+    echo "Done. HTTPS URL: $(panel_url)"
+}
+
 change_admin_password() {
     read -rsp "New admin password: " pass1
     echo
@@ -173,6 +249,7 @@ menu() {
         echo "7) Regenerate API token"
         echo "8) Change admin password"
         echo "9) Restart panel"
+        echo "10) Enable HTTPS certificate for IP"
         echo "0) Exit"
         read -rp "Choose: " choice
         case "$choice" in
@@ -185,6 +262,7 @@ menu() {
             7) regenerate_api_token ;;
             8) change_admin_password ;;
             9) restart_panel ;;
+            10) enable_ip_https ;;
             0) exit 0 ;;
             *) echo "Unknown option." ;;
         esac

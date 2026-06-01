@@ -39,6 +39,9 @@ blits
 ```
 
 The menu can show the current panel URL, change the web port, set/change a domain, show or regenerate the secret web path, regenerate the API token, change the admin password, and restart the panel.
+It can also enable HTTPS directly on the server IP address using a Let's Encrypt short-lived IP certificate.
+
+IP certificates are valid for about 6 days, so `blits` installs a renewal cron job when this mode is enabled.
 
 ## Update
 
