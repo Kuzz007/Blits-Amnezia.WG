@@ -83,6 +83,10 @@ fi
 
 ensure_project_files
 
+if [ -f "./blits" ]; then
+    install -m 0755 ./blits /usr/local/bin/blits
+fi
+
 # Шаг 3. Установка системных зависимостей хоста (Docker и AmneziaWG)
 echo -e "\n${BLUE}[1/5] Проверка и установка Docker & Docker Compose...${NC}"
 if ! command -v docker &> /dev/null; then
@@ -188,8 +192,11 @@ EXISTING_BOT_TOKEN="$(grep -E '^TELEGRAM_API_TOKEN=' data/panel.env 2>/dev/null 
 BOT_TOKEN="${EXISTING_BOT_TOKEN:-awg_bot_api_token_$(openssl rand -hex 16)}"
 SECRET_KEY_VALUE="$(grep -E '^SECRET_KEY=' data/panel.env 2>/dev/null | tail -n1 | cut -d= -f2- || true)"
 SECRET_KEY_VALUE="${SECRET_KEY_VALUE:-$(openssl rand -hex 32)}"
+EXISTING_WEB_PATH="$(grep -E '^PANEL_WEB_PATH=' data/panel.env 2>/dev/null | tail -n1 | cut -d= -f2- || true)"
+WEB_PATH="${EXISTING_WEB_PATH:-/$(openssl rand -hex 8)}"
 {
     echo "PANEL_PORT=$PANEL_PORT"
+    echo "PANEL_WEB_PATH=$WEB_PATH"
     echo "TELEGRAM_API_TOKEN=$BOT_TOKEN"
     echo "API_TOKEN=$BOT_TOKEN"
     echo "SECRET_KEY=$SECRET_KEY_VALUE"

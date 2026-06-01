@@ -8,6 +8,8 @@ Clean web panel for AmneziaWG with two compatible profiles:
 - Native AmneziaVPN import links and multi-part QR codes.
 - Russian / English panel language switch in settings.
 - Docker-based web panel installation.
+- Secret web path gate, similar to 3x-ui.
+- Server management menu with the `blits` command.
 
 ## One-command install
 
@@ -26,6 +28,17 @@ unset GITHUB_TOKEN
 ```
 
 The installer downloads the project, installs Docker if needed, installs/configures AmneziaWG, creates panel secrets, starts the panel, and asks only for the installation choices it cannot safely guess.
+It also creates a random web path. Open the panel only through the printed URL, for example `http://SERVER_IP/1a2b3c4d5e6f7a8b`.
+
+## Server menu
+
+Run on the server as `root`:
+
+```bash
+blits
+```
+
+The menu can show the current panel URL, change the web port, set/change a domain, show or regenerate the secret web path, regenerate the API token, change the admin password, and restart the panel.
 
 ## Update
 

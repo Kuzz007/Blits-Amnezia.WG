@@ -6,12 +6,14 @@ from app.database import init_db
 from app.config import DATA_DIR, logger
 from app.routes import router as web_router
 from app.api import router as api_router
+from app.web_gate import WebGateMiddleware
 
 app = FastAPI(
     title="AmneziaWG Admin Panel MVP",
     description="Веб-панель для управления AmneziaWG пирам и интеграции с Telegram-ботом",
     version="1.0.0"
 )
+app.add_middleware(WebGateMiddleware)
 
 # Создание необходимых папок при запуске
 @app.on_event("startup")

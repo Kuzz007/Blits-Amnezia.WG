@@ -83,13 +83,31 @@ def set_panel_setting(key: str, value: str):
     finally:
         conn.close()
 
-def write_panel_env(port: str):
+def _read_panel_env() -> dict[str, str]:
+    values = {}
+    if PANEL_ENV_FILE.exists():
+        for line in PANEL_ENV_FILE.read_text(encoding="utf-8").splitlines():
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            values[key.strip()] = value.strip()
+    return values
+
+
+def _write_panel_env(values: dict[str, str]):
     PANEL_ENV_FILE.parent.mkdir(parents=True, exist_ok=True)
-    PANEL_ENV_FILE.write_text(f"PANEL_PORT={port}\n", encoding="utf-8")
+    env = _read_panel_env()
+    env.update({key: value for key, value in values.items() if value is not None})
+    lines = [f"{key}={env[key]}" for key in sorted(env)]
+    PANEL_ENV_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
     try:
         os.chmod(PANEL_ENV_FILE, 0o600)
     except Exception:
         pass
+
+
+def write_panel_env(port: str):
+    _write_panel_env({"PANEL_PORT": port})
 
 def restart_panel_service_later(delay_seconds: float = 1.0):
     def _restart():

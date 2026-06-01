@@ -1,0 +1,196 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_DIR="${BLITS_INSTALL_DIR:-/root/Blits-Amnezia.WG}"
+if [ ! -d "$APP_DIR" ] && [ -d "/opt/blitz-amnezia-panel" ]; then
+    APP_DIR="/opt/blitz-amnezia-panel"
+fi
+ENV_FILE="$APP_DIR/data/panel.env"
+DB_FILE="$APP_DIR/data/panel.db"
+
+require_root() {
+    if [ "${EUID:-$(id -u)}" -ne 0 ]; then
+        echo "Run as root."
+        exit 1
+    fi
+}
+
+ensure_env() {
+    mkdir -p "$(dirname "$ENV_FILE")"
+    touch "$ENV_FILE"
+    chmod 600 "$ENV_FILE" 2>/dev/null || true
+}
+
+get_env() {
+    grep -E "^$1=" "$ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2- || true
+}
+
+set_env() {
+    ensure_env
+    local key="$1"
+    local value="$2"
+    if grep -qE "^${key}=" "$ENV_FILE"; then
+        sed -i "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
+    else
+        printf '%s=%s\n' "$key" "$value" >> "$ENV_FILE"
+    fi
+}
+
+restart_panel() {
+    cd "$APP_DIR"
+    docker compose up -d --build
+}
+
+public_ip() {
+    curl -fsS https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}'
+}
+
+panel_url() {
+    local port web_path domain scheme host
+    port="$(get_env PANEL_PORT)"
+    web_path="$(get_env PANEL_WEB_PATH)"
+    domain="$(get_env PANEL_DOMAIN)"
+    port="${port:-80}"
+    web_path="${web_path:-/}"
+    scheme="http"
+    host="${domain:-$(public_ip)}"
+    if [ "$port" = "80" ]; then
+        printf '%s://%s%s\n' "$scheme" "$host" "$web_path"
+    else
+        printf '%s://%s:%s%s\n' "$scheme" "$host" "$port" "$web_path"
+    fi
+}
+
+show_status() {
+    echo "Panel URL: $(panel_url)"
+    echo "Install dir: $APP_DIR"
+    echo "Panel port: $(get_env PANEL_PORT)"
+    echo "Domain: $(get_env PANEL_DOMAIN)"
+    echo "Web path: $(get_env PANEL_WEB_PATH)"
+    echo "API token: $(get_env TELEGRAM_API_TOKEN)"
+    echo
+    docker compose -f "$APP_DIR/docker-compose.yml" ps 2>/dev/null || true
+    echo
+    systemctl is-active awg-quick@awg0 2>/dev/null | sed 's/^/awg0: /' || true
+    systemctl is-active awg-quick@awg_legacy 2>/dev/null | sed 's/^/awg_legacy: /' || true
+}
+
+change_port() {
+    read -rp "New panel port: " port
+    if ! [[ "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
+        echo "Invalid port."
+        return
+    fi
+    set_env PANEL_PORT "$port"
+    python3 - "$DB_FILE" "$port" <<'PY' || true
+import sqlite3, sys
+db, port = sys.argv[1], sys.argv[2]
+conn = sqlite3.connect(db)
+conn.execute("insert or replace into settings(key,value) values('panel_port', ?)", (port,))
+conn.commit()
+conn.close()
+PY
+    restart_panel
+    echo "Done. URL: $(panel_url)"
+}
+
+change_domain() {
+    read -rp "Domain without http:// (empty to clear): " domain
+    set_env PANEL_DOMAIN "$domain"
+    python3 - "$DB_FILE" "$domain" <<'PY' || true
+import sqlite3, sys
+db, domain = sys.argv[1], sys.argv[2]
+conn = sqlite3.connect(db)
+conn.execute("insert or replace into settings(key,value) values('panel_domain', ?)", (domain,))
+conn.commit()
+conn.close()
+PY
+    restart_panel
+    echo "Done. URL: $(panel_url)"
+}
+
+regenerate_web_path() {
+    local web_path
+    web_path="/$(openssl rand -hex 8)"
+    set_env PANEL_WEB_PATH "$web_path"
+    restart_panel
+    echo "New web path: $web_path"
+    echo "URL: $(panel_url)"
+}
+
+set_web_path() {
+    read -rp "New web path, for example /my-secret-panel: " web_path
+    web_path="/${web_path#/}"
+    if [ "$web_path" = "/" ]; then
+        echo "Empty path is not allowed."
+        return
+    fi
+    set_env PANEL_WEB_PATH "$web_path"
+    restart_panel
+    echo "Done. URL: $(panel_url)"
+}
+
+regenerate_api_token() {
+    local token
+    token="awg_bot_api_token_$(openssl rand -hex 16)"
+    set_env TELEGRAM_API_TOKEN "$token"
+    set_env API_TOKEN "$token"
+    restart_panel
+    echo "New API token: $token"
+}
+
+change_admin_password() {
+    read -rsp "New admin password: " pass1
+    echo
+    read -rsp "Repeat password: " pass2
+    echo
+    if [ "$pass1" != "$pass2" ] || [ "${#pass1}" -lt 6 ]; then
+        echo "Passwords do not match or are too short."
+        return
+    fi
+    docker exec -e ADMIN_PASSWORD="$pass1" amnezia-panel python3 - <<'PY'
+import os, sqlite3, bcrypt
+conn = sqlite3.connect('/app/data/panel.db')
+password = os.environ['ADMIN_PASSWORD'].encode('utf-8')
+hashed = bcrypt.hashpw(password, bcrypt.gensalt()).decode('utf-8')
+conn.execute("update users set password_hash = ?, must_change_password = 0 where username = 'admin'", (hashed,))
+conn.commit()
+conn.close()
+PY
+    echo "Admin password changed."
+}
+
+menu() {
+    while true; do
+        echo
+        echo "Blits AmneziaWG Panel"
+        echo "1) Status and current values"
+        echo "2) Show panel URL"
+        echo "3) Change panel port"
+        echo "4) Change panel domain"
+        echo "5) Set web path"
+        echo "6) Regenerate web path"
+        echo "7) Regenerate API token"
+        echo "8) Change admin password"
+        echo "9) Restart panel"
+        echo "0) Exit"
+        read -rp "Choose: " choice
+        case "$choice" in
+            1) show_status ;;
+            2) panel_url ;;
+            3) change_port ;;
+            4) change_domain ;;
+            5) set_web_path ;;
+            6) regenerate_web_path ;;
+            7) regenerate_api_token ;;
+            8) change_admin_password ;;
+            9) restart_panel ;;
+            0) exit 0 ;;
+            *) echo "Unknown option." ;;
+        esac
+    done
+}
+
+require_root
+ensure_env
+menu
