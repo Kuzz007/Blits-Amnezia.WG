@@ -25,10 +25,11 @@ async def startup_event():
 @app.exception_handler(HTTPException)
 async def custom_http_exception_handler(request: Request, exc: HTTPException):
     if exc.status_code == 303:
+        root_path = request.scope.get("root_path", "").rstrip("/")
         if exc.detail == "Redirect to Login":
-            return RedirectResponse(url="/login", status_code=303)
+            return RedirectResponse(url=f"{root_path}/login", status_code=303)
         if exc.detail == "Redirect to Password Change":
-            return RedirectResponse(url="/settings/password", status_code=303)
+            return RedirectResponse(url=f"{root_path}/settings/password", status_code=303)
             
     # Для API отдаем стандартный JSON, для UI можно было бы отдавать страницу ошибки
     if request.url.path.startswith("/api/"):

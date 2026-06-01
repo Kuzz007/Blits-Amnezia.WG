@@ -10,6 +10,7 @@ from app.config import SECRET_KEY
 
 
 COOKIE_NAME = "blits_web_gate"
+REDIRECT_STATUSES = {301, 302, 303, 307, 308}
 
 
 def normalize_web_path(value: str | None) -> str:
@@ -28,6 +29,17 @@ def web_gate_cookie_value(web_path: str) -> str:
         web_path.encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()
+
+
+def prefix_redirect_location(response, web_path: str) -> None:
+    location = response.headers.get("location")
+    if not location or not location.startswith("/"):
+        return
+    if location.startswith("//") or location.startswith(web_path + "/") or location == web_path:
+        return
+    if location.startswith("/static/") or location.startswith("/api/"):
+        return
+    response.headers["location"] = web_path + location
 
 
 class WebGateMiddleware(BaseHTTPMiddleware):
@@ -50,6 +62,8 @@ class WebGateMiddleware(BaseHTTPMiddleware):
             request.scope["path"] = stripped
             request.scope["root_path"] = web_path
             response = await call_next(request)
+            if response.status_code in REDIRECT_STATUSES:
+                prefix_redirect_location(response, web_path)
             response.set_cookie(
                 COOKIE_NAME,
                 expected_cookie,
