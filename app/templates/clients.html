@@ -9,8 +9,15 @@
     <style>
         .modal-body-layout {
             display: grid;
-            grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
-            gap: 24px;
+            grid-template-columns: minmax(0, 190px) minmax(0, 1fr);
+            gap: 18px;
+        }
+        .qr-version-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            width: 100%;
+            max-width: 330px;
         }
         .status-cell {
             display: flex;
@@ -55,6 +62,7 @@
         }
         @media (max-width: 600px) {
             .modal-body-layout { grid-template-columns: 1fr; }
+            .qr-version-grid { max-width: 100%; }
         }
     </style>
 </head>
@@ -325,7 +333,7 @@
                     <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;">
                         <span style="font-weight: 600; font-size: 14px; text-align: center;">QR-коды для AmneziaVPN</span>
                         <p style="margin: 0; font-size: 12px; color: var(--text-muted); text-align: center;">Нажми показать, затем сканируй части по кругу.</p>
-                        <div style="display: grid; grid-template-columns: repeat(2, minmax(130px, 1fr)); gap: 10px; width: 100%; max-width: 460px;">
+                        <div class="qr-version-grid">
                             <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
                                 <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">Legacy</span>
                                 <div id="modal-qr-series-legacy" class="qr-series"></div>
@@ -492,9 +500,25 @@
             const cacheBuster = Date.now();
             container.innerHTML = '';
 
+            const header = document.createElement('div');
+            header.className = 'qr-part-header';
+
             const label = document.createElement('span');
             label.className = 'qr-part-label';
             label.textContent = 'QR ' + (index + 1) + '/' + count;
+
+            const hide = document.createElement('button');
+            hide.type = 'button';
+            hide.className = 'qr-hide-btn';
+            hide.textContent = 'Скрыть';
+            hide.onclick = () => {
+                clearInterval(qrTimers[stateKey]);
+                delete qrTimers[stateKey];
+                const version = series.version || (stateKey.startsWith('1.0') ? '1.0' : '2.0');
+                resetQrButton(version, container.id);
+            };
+            header.appendChild(label);
+            header.appendChild(hide);
 
             const box = document.createElement('div');
             box.className = 'qr-box';
@@ -504,41 +528,8 @@
             img.src = url + (url.includes('?') ? '&' : '?') + '_=' + cacheBuster;
             box.appendChild(img);
 
-            const controls = document.createElement('div');
-            controls.className = 'qr-controls';
-
-            const prev = document.createElement('button');
-            prev.type = 'button';
-            prev.className = 'qr-nav-btn';
-            prev.innerHTML = '<i class="fa-solid fa-chevron-left"></i>';
-            prev.title = 'Предыдущий QR';
-            prev.onclick = () => {
-                qrSeriesState[stateKey] = (index - 1 + count) % count;
-                restartQrRotation(container, series, stateKey);
-                drawQrPart(container, series, stateKey);
-            };
-
-            const next = document.createElement('button');
-            next.type = 'button';
-            next.className = 'qr-nav-btn';
-            next.innerHTML = '<i class="fa-solid fa-chevron-right"></i>';
-            next.title = 'Следующий QR';
-            next.onclick = () => {
-                qrSeriesState[stateKey] = (index + 1) % count;
-                restartQrRotation(container, series, stateKey);
-                drawQrPart(container, series, stateKey);
-            };
-
-            const hint = document.createElement('span');
-            hint.className = 'qr-step-hint';
-            hint.textContent = '2 сек';
-
-            controls.appendChild(prev);
-            controls.appendChild(hint);
-            controls.appendChild(next);
-            container.appendChild(label);
+            container.appendChild(header);
             container.appendChild(box);
-            container.appendChild(controls);
         }
 
         function startQrRotation(container, series, stateKey) {

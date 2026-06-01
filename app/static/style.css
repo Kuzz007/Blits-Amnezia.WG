@@ -655,7 +655,7 @@ body {
 .modal-content {
     background-color: var(--card-bg);
     border-radius: var(--radius);
-    max-width: 600px;
+    max-width: 660px;
     width: 100%;
     border: 1px solid var(--border-color);
     box-shadow: var(--shadow-lg);
@@ -727,7 +727,7 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 16px;
+    padding: 10px;
     background-color: white;
     border: 1px solid var(--border-color);
     border-radius: 8px;
@@ -735,7 +735,7 @@ body {
 }
 
 .qr-box img {
-    max-width: 145px;
+    max-width: 124px;
     height: auto;
 }
 
@@ -747,7 +747,8 @@ body {
     justify-content: center;
     min-height: 96px;
     width: 100%;
-    max-width: 190px;
+    max-width: 148px;
+    justify-self: center;
 }
 
 .qr-part-label,
@@ -757,47 +758,32 @@ body {
     color: var(--text-muted);
 }
 
-.qr-controls {
-    display: grid;
-    grid-template-columns: 30px minmax(44px, 1fr) 30px;
-    align-items: center;
-    gap: 4px;
-    width: 100%;
-    max-width: 150px;
-}
-
-.qr-nav-btn {
-    width: 30px;
-    height: 28px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    background: var(--card-bg);
-    color: var(--text-main);
-    cursor: pointer;
-}
-
-.qr-nav-btn:disabled {
-    opacity: 0.35;
-    cursor: not-allowed;
-}
-
-.qr-step-hint {
-    font-size: 11px;
-    color: var(--text-muted);
-    text-align: center;
-    line-height: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
 .qr-show-btn {
     width: 100%;
-    max-width: 150px;
+    max-width: 136px;
     justify-content: center;
+    white-space: nowrap;
+}
+
+.qr-part-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    width: 100%;
+    min-height: 26px;
+}
+
+.qr-hide-btn {
+    border: 1px solid var(--border-color);
+    border-radius: 7px;
+    background: var(--gray-light);
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    padding: 6px 7px;
+    cursor: pointer;
 }
 
 /* Animations */
