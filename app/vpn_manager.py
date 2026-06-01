@@ -679,10 +679,10 @@ def rebuild_and_sync_vpn_config():
         pass
         
     config_lines.append(
-        f"PostUp = iptables -t nat -A POSTROUTING -o {default_net_interface} -j MASQUERADE; ip6tables -t nat -A POSTROUTING -o {default_net_interface} -j MASQUERADE; iptables -A FORWARD -i {AWG_INTERFACE} -j ACCEPT; ip6tables -A FORWARD -i {AWG_INTERFACE} -j ACCEPT"
+        f"PostUp = iptables -t nat -A POSTROUTING -o {default_net_interface} -j MASQUERADE; ip6tables -t nat -A POSTROUTING -o {default_net_interface} -j MASQUERADE; iptables -A FORWARD -i {AWG_INTERFACE} -j ACCEPT; iptables -A FORWARD -o {AWG_INTERFACE} -j ACCEPT; ip6tables -A FORWARD -i {AWG_INTERFACE} -j ACCEPT; ip6tables -A FORWARD -o {AWG_INTERFACE} -j ACCEPT"
     )
     config_lines.append(
-        f"PostDown = iptables -t nat -D POSTROUTING -o {default_net_interface} -j MASQUERADE; ip6tables -t nat -D POSTROUTING -o {default_net_interface} -j MASQUERADE; iptables -D FORWARD -i {AWG_INTERFACE} -j ACCEPT; ip6tables -D FORWARD -i {AWG_INTERFACE} -j ACCEPT"
+        f"PostDown = iptables -t nat -D POSTROUTING -o {default_net_interface} -j MASQUERADE; ip6tables -t nat -D POSTROUTING -o {default_net_interface} -j MASQUERADE; iptables -D FORWARD -i {AWG_INTERFACE} -j ACCEPT; iptables -D FORWARD -o {AWG_INTERFACE} -j ACCEPT; ip6tables -D FORWARD -i {AWG_INTERFACE} -j ACCEPT; ip6tables -D FORWARD -o {AWG_INTERFACE} -j ACCEPT"
     )
     config_lines.append("")
     
@@ -796,8 +796,8 @@ def rebuild_and_sync_legacy_vpn_config():
         f"H3 = {h3}",
         f"H4 = {h4}",
         "",
-        f"PostUp = iptables -t nat -A POSTROUTING -o {default_net_interface} -j MASQUERADE; iptables -A FORWARD -i {LEGACY_INTERFACE} -j ACCEPT",
-        f"PostDown = iptables -t nat -D POSTROUTING -o {default_net_interface} -j MASQUERADE; iptables -D FORWARD -i {LEGACY_INTERFACE} -j ACCEPT",
+        f"PostUp = iptables -t nat -A POSTROUTING -o {default_net_interface} -j MASQUERADE; iptables -A FORWARD -i {LEGACY_INTERFACE} -j ACCEPT; iptables -A FORWARD -o {LEGACY_INTERFACE} -j ACCEPT",
+        f"PostDown = iptables -t nat -D POSTROUTING -o {default_net_interface} -j MASQUERADE; iptables -D FORWARD -i {LEGACY_INTERFACE} -j ACCEPT; iptables -D FORWARD -o {LEGACY_INTERFACE} -j ACCEPT",
         "",
     ]
 

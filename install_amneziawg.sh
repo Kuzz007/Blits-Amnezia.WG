@@ -126,8 +126,8 @@ H2 = 2056848576-2126223526
 H3 = 2141047196-2144456894
 H4 = 2146243463-2147170402
 
-PostUp = iptables -t nat -A POSTROUTING -o $DEFAULT_INTERFACE -j MASQUERADE; ip6tables -t nat -A POSTROUTING -o $DEFAULT_INTERFACE -j MASQUERADE; iptables -A FORWARD -i awg0 -j ACCEPT; ip6tables -A FORWARD -i awg0 -j ACCEPT
-PostDown = iptables -t nat -D POSTROUTING -o $DEFAULT_INTERFACE -j MASQUERADE; ip6tables -t nat -D POSTROUTING -o $DEFAULT_INTERFACE -j MASQUERADE; iptables -D FORWARD -i awg0 -j ACCEPT; ip6tables -D FORWARD -i awg0 -j ACCEPT
+PostUp = iptables -t nat -A POSTROUTING -o $DEFAULT_INTERFACE -j MASQUERADE; ip6tables -t nat -A POSTROUTING -o $DEFAULT_INTERFACE -j MASQUERADE; iptables -A FORWARD -i awg0 -j ACCEPT; iptables -A FORWARD -o awg0 -j ACCEPT; ip6tables -A FORWARD -i awg0 -j ACCEPT; ip6tables -A FORWARD -o awg0 -j ACCEPT
+PostDown = iptables -t nat -D POSTROUTING -o $DEFAULT_INTERFACE -j MASQUERADE; ip6tables -t nat -D POSTROUTING -o $DEFAULT_INTERFACE -j MASQUERADE; iptables -D FORWARD -i awg0 -j ACCEPT; iptables -D FORWARD -o awg0 -j ACCEPT; ip6tables -D FORWARD -i awg0 -j ACCEPT; ip6tables -D FORWARD -o awg0 -j ACCEPT
 EOF
   chmod 600 "$CONFIG_FILE"
   echo "Базовый конфиг awg0.conf успешно создан."
@@ -156,8 +156,8 @@ H2 = 2056848576-2126223526
 H3 = 2141047196-2144456894
 H4 = 2146243463-2147170402
 
-PostUp = iptables -t nat -A POSTROUTING -o $DEFAULT_INTERFACE -j MASQUERADE; iptables -A FORWARD -i $LEGACY_INTERFACE -j ACCEPT
-PostDown = iptables -t nat -D POSTROUTING -o $DEFAULT_INTERFACE -j MASQUERADE; iptables -D FORWARD -i $LEGACY_INTERFACE -j ACCEPT
+PostUp = iptables -t nat -A POSTROUTING -o $DEFAULT_INTERFACE -j MASQUERADE; iptables -A FORWARD -i $LEGACY_INTERFACE -j ACCEPT; iptables -A FORWARD -o $LEGACY_INTERFACE -j ACCEPT
+PostDown = iptables -t nat -D POSTROUTING -o $DEFAULT_INTERFACE -j MASQUERADE; iptables -D FORWARD -i $LEGACY_INTERFACE -j ACCEPT; iptables -D FORWARD -o $LEGACY_INTERFACE -j ACCEPT
 EOF
   chmod 600 "$LEGACY_CONFIG_FILE"
   echo "Legacy-конфиг успешно создан."
