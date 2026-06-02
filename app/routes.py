@@ -225,8 +225,11 @@ def _security_checks(user: dict) -> list[dict]:
         cert_candidates.append(Path(f"/etc/letsencrypt/live/{panel_domain}/fullchain.pem"))
     cert_exists = any(path.exists() for path in cert_candidates)
     default_password = verify_password("admin", user.get("password_hash", ""))
+    https_message = "HTTPS включен через nginx-proxy"
+    if cert_exists:
+        https_message = "сертификат найден и HTTPS включен"
     return [
-        _bool_check("HTTPS", https_enabled and cert_exists, "сертификат найден и HTTPS включен", "HTTPS или сертификат не найдены"),
+        _bool_check("HTTPS", https_enabled, https_message, "HTTPS выключен"),
         _bool_check("Секретный web path", bool(web_path and web_path != "/"), web_path or "не задан", "секретный путь не задан"),
         _bool_check("Пароль администратора", not default_password and not user.get("must_change_password"), "пароль не стандартный", "нужно сменить admin/admin"),
         _bool_check("API token", len(api_token) >= 24, "токен задан", "токен пустой или слишком короткий"),
