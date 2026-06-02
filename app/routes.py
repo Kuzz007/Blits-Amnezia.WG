@@ -217,10 +217,16 @@ def _security_checks(user: dict) -> list[dict]:
     api_token = os.getenv("TELEGRAM_API_TOKEN") or os.getenv("API_TOKEN") or ""
     public_ip = get_vpn_setting("public_ip", SERVER_PUBLIC_IP)
     cert_name = os.getenv("PANEL_CERT_NAME", panel_domain or public_ip)
-    cert_path = Path(f"/etc/letsencrypt/live/{cert_name}/fullchain.pem")
+    cert_candidates = [
+        Path(f"/etc/letsencrypt/live/{cert_name}/fullchain.pem"),
+        Path(f"/etc/letsencrypt/live/{public_ip}/fullchain.pem"),
+    ]
+    if panel_domain:
+        cert_candidates.append(Path(f"/etc/letsencrypt/live/{panel_domain}/fullchain.pem"))
+    cert_exists = any(path.exists() for path in cert_candidates)
     default_password = verify_password("admin", user.get("password_hash", ""))
     return [
-        _bool_check("HTTPS", https_enabled and cert_path.exists(), "сертификат найден и HTTPS включен", "HTTPS или сертификат не найдены"),
+        _bool_check("HTTPS", https_enabled and cert_exists, "сертификат найден и HTTPS включен", "HTTPS или сертификат не найдены"),
         _bool_check("Секретный web path", bool(web_path and web_path != "/"), web_path or "не задан", "секретный путь не задан"),
         _bool_check("Пароль администратора", not default_password and not user.get("must_change_password"), "пароль не стандартный", "нужно сменить admin/admin"),
         _bool_check("API token", len(api_token) >= 24, "токен задан", "токен пустой или слишком короткий"),
@@ -229,7 +235,8 @@ def _security_checks(user: dict) -> list[dict]:
     ]
 
 def _panel_update_info() -> dict:
-    project_dir = os.getenv("BLITZ_PROJECT_DIR", str(BASE_DIR))
+    default_project_dir = "/root/Blits-Amnezia.WG" if str(BASE_DIR) == "/app" else str(BASE_DIR)
+    project_dir = os.getenv("BLITZ_PROJECT_DIR", default_project_dir)
     command = f"cd {shlex.quote(project_dir)} && git pull origin main && docker compose --profile ssl up -d --build"
     enabled = os.getenv("BLITZ_ENABLE_WEB_UPDATE", "0") == "1"
     current = "unknown"
