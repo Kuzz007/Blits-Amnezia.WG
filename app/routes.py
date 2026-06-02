@@ -40,6 +40,10 @@ from app.qr_series import render_qr_png, split_amnezia_qr_payload
 
 router = APIRouter(tags=["Web UI"])
 templates = Jinja2Templates(directory="app/templates")
+LOGIN_FAILURES: dict[str, list[float]] = {}
+LOGIN_LIMIT_WINDOW_SECONDS = 10 * 60
+LOGIN_BLOCK_SECONDS = 10 * 60
+LOGIN_MAX_FAILURES = 5
 
 # Вспомогательная функция для форматирования дат в шаблонах Jinja
 def format_datetime(value: str) -> str:
@@ -51,6 +55,27 @@ def format_datetime(value: str) -> str:
 
 templates.env.filters["datetime"] = format_datetime
 
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",", 1)[0].strip()
+    return request.client.host if request.client else "unknown"
+
+def _is_login_blocked(ip: str) -> bool:
+    now = time.time()
+    failures = [ts for ts in LOGIN_FAILURES.get(ip, []) if now - ts <= LOGIN_BLOCK_SECONDS]
+    LOGIN_FAILURES[ip] = failures
+    return len(failures) >= LOGIN_MAX_FAILURES
+
+def _record_login_failure(ip: str) -> None:
+    now = time.time()
+    failures = [ts for ts in LOGIN_FAILURES.get(ip, []) if now - ts <= LOGIN_LIMIT_WINDOW_SECONDS]
+    failures.append(now)
+    LOGIN_FAILURES[ip] = failures
+
+def _clear_login_failures(ip: str) -> None:
+    LOGIN_FAILURES.pop(ip, None)
+
 def _validated_int_setting(name: str, value: str, min_value: int, max_value: int) -> str:
     try:
         number = int(str(value).strip())
@@ -59,6 +84,58 @@ def _validated_int_setting(name: str, value: str, min_value: int, max_value: int
     if number < min_value or number > max_value:
         raise ValueError(f"{name}: значение должно быть от {min_value} до {max_value}")
     return str(number)
+
+def _check_udp_port(port: str) -> dict:
+    try:
+        number = int(str(port).strip())
+        if 1 <= number <= 65535:
+            return {"ok": True, "message": f"UDP {number} настроен"}
+        return {"ok": False, "message": f"UDP {port}: порт должен быть от 1 до 65535"}
+    except Exception as exc:
+        return {"ok": False, "message": f"UDP {port}: {exc}"}
+
+def _diagnostic_checks() -> list[dict]:
+    from app.vpn_manager import get_vpn_setting, LEGACY_CONFIG_FILE, LEGACY_INTERFACE
+
+    public_ip = get_vpn_setting("public_ip", SERVER_PUBLIC_IP)
+    web_path = os.getenv("PANEL_WEB_PATH", "")
+    cert_path = Path(f"/etc/letsencrypt/live/{public_ip}/fullchain.pem")
+    checks = [
+        {"name": "Panel process", "ok": True, "message": "веб-панель отвечает"},
+        {"name": "Amnezia 2.0 interface", "ok": os.path.exists("/sys/class/net/awg0"), "message": "awg0 найден" if os.path.exists("/sys/class/net/awg0") else "awg0 не найден"},
+        {"name": "Amnezia 1 / Legacy interface", "ok": os.path.exists(f"/sys/class/net/{LEGACY_INTERFACE}"), "message": f"{LEGACY_INTERFACE} найден" if os.path.exists(f"/sys/class/net/{LEGACY_INTERFACE}") else f"{LEGACY_INTERFACE} не найден"},
+        {"name": "Amnezia 2.0 config", "ok": AWG_CONFIG_FILE.exists(), "message": str(AWG_CONFIG_FILE)},
+        {"name": "Amnezia 1 / Legacy config", "ok": LEGACY_CONFIG_FILE.exists(), "message": str(LEGACY_CONFIG_FILE)},
+        {"name": "HTTPS certificate", "ok": cert_path.exists(), "message": str(cert_path) if cert_path.exists() else "сертификат для IP/домена не найден"},
+        {"name": "Secret web path", "ok": bool(web_path), "message": web_path or "секретный путь не задан"},
+    ]
+
+    legacy_text = LEGACY_CONFIG_FILE.read_text(errors="ignore") if LEGACY_CONFIG_FILE.exists() else ""
+    checks.append({
+        "name": "Legacy without S3/S4",
+        "ok": "S3 =" not in legacy_text and "S4 =" not in legacy_text,
+        "message": "S3/S4 отсутствуют" if "S3 =" not in legacy_text and "S4 =" not in legacy_text else "S3/S4 найдены в Legacy",
+    })
+
+    return checks
+
+def _vpn_config_checks() -> list[dict]:
+    from app.vpn_manager import get_vpn_setting, LEGACY_CONFIG_FILE
+
+    port = get_vpn_setting("port", str(AWG_PORT))
+    legacy_port = get_vpn_setting("legacy_port", "43913")
+    checks = [
+        {"name": "Different UDP ports", "ok": port != legacy_port, "message": f"2.0: {port}, Legacy: {legacy_port}"},
+        {"name": "Amnezia 2.0 UDP port", **_check_udp_port(port)},
+        {"name": "Legacy UDP port", **_check_udp_port(legacy_port)},
+    ]
+    legacy_text = LEGACY_CONFIG_FILE.read_text(errors="ignore") if LEGACY_CONFIG_FILE.exists() else ""
+    checks.append({
+        "name": "Legacy excludes S3/S4",
+        "ok": "S3 =" not in legacy_text and "S4 =" not in legacy_text,
+        "message": "OK" if "S3 =" not in legacy_text and "S4 =" not in legacy_text else "Legacy config contains S3/S4",
+    })
+    return checks
 
 PANEL_ENV_FILE = DATA_DIR / "panel.env"
 DOMAIN_RE = re.compile(r"^(?=.{1,253}$)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$")
@@ -333,14 +410,23 @@ async def login_page(request: Request, error: str = None):
 
 @router.post("/login")
 async def login_action(request: Request, username: str = Form(...), password: str = Form(...)):
+    ip = _client_ip(request)
+    if _is_login_blocked(ip):
+        log_event("login_blocked", f"Слишком много ошибок входа с IP {ip}.", meta={"ip": ip, "username": username})
+        return templates.TemplateResponse(request=request, name="login.html", context={"error": "Слишком много попыток входа. Подождите 10 минут."}, status_code=429)
+
     conn = get_db_connection()
     user = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
     conn.close()
     
     if not user or not verify_password(password, user["password_hash"]):
+        _record_login_failure(ip)
+        log_event("login_failed", f"Ошибка входа для пользователя {username} с IP {ip}.", meta={"ip": ip, "username": username})
         return templates.TemplateResponse(request=request, name="login.html", context={"error": "Неверное имя пользователя или пароль"})
         
     # Создаем токен
+    _clear_login_failures(ip)
+    log_event("login_success", f"Успешный вход пользователя {username} с IP {ip}.", meta={"ip": ip, "username": username})
     token = create_access_token(data={"sub": username})
     
     response = RedirectResponse(url="/", status_code=303)
@@ -361,6 +447,28 @@ async def logout_action():
     return response
 
 # --- СТРАНИЦЫ АДМИН-ПАНЕЛИ (Защищены авторизацией) ---
+
+@router.get("/diagnostics", response_class=HTMLResponse)
+async def diagnostics_page(
+    request: Request,
+    user: dict = Depends(check_password_change_required)
+):
+    return templates.TemplateResponse(
+        request=request,
+        name="diagnostics.html",
+        context={
+            "user": user,
+            "checks": _diagnostic_checks(),
+            "current_page": "diagnostics",
+        },
+    )
+
+@router.get("/settings/vpn/check")
+async def check_vpn_config(
+    user: dict = Depends(check_password_change_required)
+):
+    checks = _vpn_config_checks()
+    return JSONResponse({"ok": all(item["ok"] for item in checks), "checks": checks})
 
 @router.get("/", response_class=HTMLResponse)
 @router.get("/dashboard", response_class=HTMLResponse)
@@ -562,6 +670,31 @@ async def download_backup(user: dict = Depends(check_password_change_required)):
     buffer.seek(0)
     filename = datetime.datetime.utcnow().strftime("blitz-panel-backup-%Y%m%d-%H%M%S.zip")
     log_event("backup", "Скачан резервный архив панели.")
+    return StreamingResponse(
+        buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+@router.get("/backup/download/db")
+async def download_database_backup(user: dict = Depends(check_password_change_required)):
+    db_path = DATA_DIR / "panel.db"
+    if not db_path.exists():
+        raise HTTPException(status_code=404, detail="Database not found")
+    filename = datetime.datetime.utcnow().strftime("blitz-panel-db-%Y%m%d-%H%M%S.db")
+    log_event("backup_db", "Скачана резервная копия базы клиентов.")
+    return FileResponse(db_path, media_type="application/octet-stream", filename=filename)
+
+@router.get("/backup/download/settings")
+async def download_settings_backup(user: dict = Depends(check_password_change_required)):
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for path in (DATA_DIR / "panel.env", AWG_CONFIG_FILE, Path("/etc/amnezia/amneziawg/awg_legacy.conf")):
+            if path.exists():
+                archive.write(path, f"settings/{path.name}")
+    buffer.seek(0)
+    filename = datetime.datetime.utcnow().strftime("blitz-panel-settings-%Y%m%d-%H%M%S.zip")
+    log_event("backup_settings", "Скачана резервная копия настроек панели и VPN.")
     return StreamingResponse(
         buffer,
         media_type="application/zip",
@@ -993,6 +1126,7 @@ async def save_vpn_settings(
         
         # Пересборка конфигов сервера и перезапуск интерфейса VPN
         rebuild_and_sync_vpn_config()
+        log_event("settings_vpn_updated", "Настройки VPN и AmneziaWG обновлены.", meta={"port": port_value, "legacy_port": legacy_port_value})
         success_msg = "Настройки успешно сохранены!"
         error_msg = None
     except Exception as e:
@@ -1186,6 +1320,7 @@ async def save_panel_settings(
         set_panel_setting("telegram_notifications_enabled", telegram_enabled_value)
         set_panel_setting("telegram_admin_bot_token", telegram_token_value)
         set_panel_setting("telegram_admin_chat_id", telegram_chat_id_value)
+        log_event("settings_telegram_updated", "Настройки Telegram уведомлений обновлены.", meta={"enabled": telegram_enabled_value})
         success_msg = "Настройки Telegram сохранены."
     except Exception as e:
         logger.error(f"Не удалось сохранить настройки Telegram: {e}")
@@ -1286,6 +1421,7 @@ async def save_panel_theme(
         raise HTTPException(status_code=400, detail="Тема панели должна быть light или dark")
 
     set_panel_setting("panel_theme", theme_value)
+    log_event("settings_theme_updated", f"Тема панели изменена на {theme_value}.", meta={"theme": theme_value})
     response = JSONResponse({"status": "ok", "theme": theme_value})
     response.set_cookie("panel_theme", theme_value, max_age=60 * 60 * 24 * 365, samesite="lax")
     return response
@@ -1300,6 +1436,7 @@ async def save_panel_language(
         raise HTTPException(status_code=400, detail="Panel language must be ru or en")
 
     set_panel_setting("panel_language", language_value)
+    log_event("settings_language_updated", f"Язык панели изменен на {language_value}.", meta={"language": language_value})
     response = JSONResponse({"status": "ok", "language": language_value})
     response.set_cookie("panel_lang", language_value, max_age=60 * 60 * 24 * 365, samesite="lax")
     return response

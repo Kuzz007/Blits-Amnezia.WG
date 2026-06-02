@@ -24,6 +24,9 @@
                 <li class="menu-item {% if current_page == 'events' %}active{% endif %}">
                     <a href="/events"><i class="fa-solid fa-clock-rotate-left"></i> Журнал</a>
                 </li>
+                <li class="menu-item {% if current_page == 'diagnostics' %}active{% endif %}">
+                    <a href="/diagnostics"><i class="fa-solid fa-stethoscope"></i> Диагностика</a>
+                </li>
                 <li class="menu-item {% if current_page == 'password' %}active{% endif %}">
                     <a href="/settings/password"><i class="fa-solid fa-key"></i> Смена пароля</a>
                 </li>
@@ -55,6 +58,9 @@
         <main class="main-content">
             <header class="main-header">
                 <h1 class="page-title">Параметры AmneziaWG</h1>
+                <div class="header-actions">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="checkVpnConfig()"><i class="fa-solid fa-list-check"></i> Проверить конфиг</button>
+                </div>
             </header>
 
             <div class="content-body">
@@ -69,6 +75,13 @@
                     <span><i class="fa-solid fa-triangle-exclamation"></i> <strong>Ошибка:</strong> {{ error }}</span>
                 </div>
                 {% endif %}
+
+                <div id="vpn-check-result" class="content-card" style="display: none; max-width: 920px;">
+                    <div class="card-header">
+                        <h2 class="card-title"><i class="fa-solid fa-list-check"></i> Результат проверки</h2>
+                    </div>
+                    <div id="vpn-check-body" class="card-body" style="display: flex; flex-direction: column; gap: 10px;"></div>
+                </div>
 
                 <form action="/settings/vpn" method="post" class="content-card" style="max-width: 920px;">
                     <div class="card-header">
@@ -233,6 +246,30 @@
             </div>
         </main>
     </div>
+<script>
+    async function checkVpnConfig() {
+        const t = window.panelT || ((text) => text);
+        const panel = document.getElementById('vpn-check-result');
+        const body = document.getElementById('vpn-check-body');
+        panel.style.display = 'block';
+        body.innerHTML = '<span class="client-subtext">' + t('Проверка...') + '</span>';
+        try {
+            const response = await fetch('/settings/vpn/check', { credentials: 'same-origin' });
+            const data = await response.json();
+            body.innerHTML = data.checks.map((item) => `
+                <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:12px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-main);">
+                    <div>
+                        <div style="font-weight:700;color:var(--dark);">${item.name}</div>
+                        <div class="client-subtext">${item.message}</div>
+                    </div>
+                    <span class="badge ${item.ok ? 'badge-success' : 'badge-danger'}">${item.ok ? 'OK' : t('Ошибка')}</span>
+                </div>
+            `).join('');
+        } catch (error) {
+            body.innerHTML = '<span class="badge badge-danger">' + t('Не удалось выполнить проверку') + '</span>';
+        }
+    }
+</script>
 <script src="/static/i18n.js"></script>
 </body>
 </html>

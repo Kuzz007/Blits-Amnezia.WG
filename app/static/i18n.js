@@ -23,6 +23,7 @@
         'Настройки панели': 'Panel settings',
         'API Документация': 'API documentation',
         'API': 'API',
+        'Диагностика': 'Diagnostics',
         'Выйти': 'Log out',
         'Пароль': 'Password',
         'Администратор': 'Administrator',
@@ -119,6 +120,7 @@
         'Сохранить и применить': 'Save and apply',
         'Готово.': 'Done.',
         'Ошибка:': 'Error:',
+        'Ошибка': 'Error',
         'Внимание.': 'Warning.',
         'Настройки сохранены, конфигурация AmneziaWG обновлена.': 'Settings saved, AmneziaWG configuration updated.',
         'Настройки Telegram сохранены.': 'Telegram settings saved.',
@@ -138,6 +140,16 @@
         'Токен бота': 'Bot token',
         'Chat ID администратора': 'Admin chat ID',
         'Скачать бэкап': 'Download backup',
+        'Только база': 'Database only',
+        'Только настройки': 'Settings only',
+        'Проверить конфиг': 'Check config',
+        'Результат проверки': 'Check result',
+        'Проверка...': 'Checking...',
+        'Не удалось выполнить проверку': 'Could not run check',
+        'После скана дождись следующей части': 'After scanning, wait for the next part',
+        'Последний QR этой версии': 'Last QR for this version',
+        'Amnezia 1 / Legacy QR': 'Amnezia 1 / Legacy QR',
+        'Amnezia 2.0 QR': 'Amnezia 2.0 QR',
         'Сейчас панель доступна по адресу:': 'The panel is currently available at:',
         'После настройки DNS и прокси домен можно будет использовать как': 'After DNS and proxy setup, the domain can be used as',
 
@@ -300,6 +312,7 @@
             .replace('Дашборд', 'Dashboard')
             .replace('Клиенты', 'Clients')
             .replace('Журнал', 'Events')
+            .replace('Диагностика', 'Diagnostics')
             .replace('Настройки VPN', 'VPN settings')
             .replace('Настройки панели', 'Panel settings')
             .replace('Каскад Amnezia', 'Amnezia cascade')

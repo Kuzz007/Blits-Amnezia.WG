@@ -248,6 +248,9 @@
                 <li class="menu-item {% if current_page == 'events' %}active{% endif %}">
                     <a href="/events"><i class="fa-solid fa-clock-rotate-left"></i> Журнал</a>
                 </li>
+                <li class="menu-item {% if current_page == 'diagnostics' %}active{% endif %}">
+                    <a href="/diagnostics"><i class="fa-solid fa-stethoscope"></i> Диагностика</a>
+                </li>
                 <li class="menu-item {% if current_page == 'password' %}active{% endif %}">
                     <a href="/settings/password"><i class="fa-solid fa-key"></i> Смена пароля</a>
                 </li>
@@ -359,6 +362,8 @@
                             {% endif %}
                             <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
                                 <a class="btn btn-primary" href="/backup/download"><i class="fa-solid fa-download"></i> Скачать бэкап</a>
+                                <a class="btn btn-secondary" href="/backup/download/db"><i class="fa-solid fa-database"></i> Только база</a>
+                                <a class="btn btn-secondary" href="/backup/download/settings"><i class="fa-solid fa-sliders"></i> Только настройки</a>
                                 <form action="/backup/restore" method="post" enctype="multipart/form-data" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;" onsubmit="return confirm('Восстановить панель из выбранного бэкапа? Текущая база будет сохранена аварийной копией.');">
                                     <input type="file" name="backup_file" accept=".zip" class="form-control" style="max-width: 260px;" required>
                                     <button class="btn btn-secondary" type="submit"><i class="fa-solid fa-upload"></i> Загрузить и восстановить</button>

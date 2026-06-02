@@ -36,6 +36,13 @@
             width: 100%;
             min-height: 28px;
         }
+        .qr-step-hint {
+            display: block;
+            width: 100%;
+            min-height: 32px;
+            text-align: center;
+            line-height: 1.25;
+        }
         .qr-hide-btn {
             width: 24px;
             height: 24px;
@@ -119,6 +126,9 @@
                 </li>
                 <li class="menu-item {% if current_page == 'events' %}active{% endif %}">
                     <a href="/events"><i class="fa-solid fa-clock-rotate-left"></i> Журнал</a>
+                </li>
+                <li class="menu-item {% if current_page == 'diagnostics' %}active{% endif %}">
+                    <a href="/diagnostics"><i class="fa-solid fa-stethoscope"></i> Диагностика</a>
                 </li>
                 <li class="menu-item {% if current_page == 'password' %}active{% endif %}">
                     <a href="/settings/password"><i class="fa-solid fa-key"></i> Смена пароля</a>
@@ -245,6 +255,12 @@
                                             <div class="client-name-cell">
                                                 <strong><a href="/clients/{{ client.id }}" style="color: var(--text-main);">{{ client.name }}</a></strong>
                                                 <span class="client-subtext">Создан: {{ client.created_at | datetime }}</span>
+                                                <span class="client-subtext" style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px;">
+                                                    <span class="badge badge-gray">Amnezia 1</span>
+                                                    <span class="badge badge-gray">Amnezia 2.0</span>
+                                                    <span class="badge badge-success">Full</span>
+                                                    <span class="badge badge-warning">Split</span>
+                                                </span>
                                                 {% if client.telegram_id %}
                                                 <span class="client-subtext"><i class="fa-brands fa-telegram"></i> {{ client.telegram_id }}</span>
                                                 {% endif %}
@@ -535,16 +551,17 @@
         function resetQrButton(version, containerId) {
             const container = document.getElementById(containerId);
             if (!container) return;
+            const t = window.panelT || ((text) => text);
             const label = version === '1.0' ? 'Amnezia 1 / Legacy QR' : 'Amnezia 2.0 QR';
             container.innerHTML = '';
             const button = document.createElement('button');
             button.type = 'button';
             button.className = 'btn btn-primary btn-sm qr-show-btn';
-            button.innerHTML = '<i class="fa-solid fa-qrcode"></i> Показать QR';
+            button.innerHTML = '<i class="fa-solid fa-qrcode"></i> ' + t('Показать QR');
             button.onclick = () => renderQrSeries(version, containerId);
             const hint = document.createElement('span');
             hint.className = 'qr-loading';
-            hint.textContent = label;
+            hint.textContent = t(label);
             container.appendChild(button);
             container.appendChild(hint);
         }
@@ -567,7 +584,7 @@
             hide.type = 'button';
             hide.className = 'qr-hide-btn';
             hide.innerHTML = '<i class="fa-solid fa-eye-slash"></i>';
-            hide.title = 'Скрыть QR';
+            hide.title = (window.panelT || ((text) => text))('Скрыть QR');
             hide.onclick = () => {
                 clearInterval(qrTimers[stateKey]);
                 delete qrTimers[stateKey];
@@ -587,6 +604,12 @@
 
             container.appendChild(header);
             container.appendChild(box);
+
+            const guide = document.createElement('span');
+            guide.className = 'qr-loading qr-step-hint';
+            const t = window.panelT || ((text) => text);
+            guide.textContent = index + 1 < count ? t('После скана дождись следующей части') : t('Последний QR этой версии');
+            container.appendChild(guide);
         }
 
         function startQrRotation(container, series, stateKey) {
