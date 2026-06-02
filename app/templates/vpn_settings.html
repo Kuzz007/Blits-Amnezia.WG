@@ -231,6 +231,13 @@
                             <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
                                 Все строки из этого списка пойдут через VPN в split-ключах. Можно писать CIDR, одиночные IP или домены. Домены сервер преобразует в IP при генерации ключа. Сейчас получается маршрутов: {{ settings.split_tunnel_route_count }}.
                             </p>
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+                                {% for preset_name, preset_items in split_presets.items() %}
+                                <button type="button" class="btn btn-secondary btn-sm" onclick='addSplitPreset({{ preset_items | tojson }})'>
+                                    <i class="fa-solid fa-plus"></i> {{ preset_name }}
+                                </button>
+                                {% endfor %}
+                            </div>
                             <div class="form-group" style="margin-bottom: 0;">
                                 <label for="split_tunnel_routes">Список маршрутов и доменов</label>
                                 <textarea id="split_tunnel_routes" name="split_tunnel_routes" class="form-control" rows="14" spellcheck="false" style="font-family: 'Courier New', monospace;">{{ settings.split_tunnel_routes }}</textarea>
@@ -247,6 +254,16 @@
         </main>
     </div>
 <script>
+    function addSplitPreset(items) {
+        const textarea = document.getElementById('split_tunnel_routes');
+        const current = textarea.value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+        items.forEach((item) => {
+            if (!current.includes(item)) current.push(item);
+        });
+        textarea.value = current.join('\n');
+        textarea.focus();
+    }
+
     async function checkVpnConfig() {
         const t = window.panelT || ((text) => text);
         const panel = document.getElementById('vpn-check-result');
@@ -269,6 +286,10 @@
             body.innerHTML = '<span class="badge badge-danger">' + t('Не удалось выполнить проверку') + '</span>';
         }
     }
+
+    {% if success %}
+    setTimeout(checkVpnConfig, 300);
+    {% endif %}
 </script>
 <script src="/static/i18n.js"></script>
 </body>

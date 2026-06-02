@@ -9,6 +9,7 @@ import time
 import io
 import zipfile
 import shutil
+import shlex
 from pathlib import Path
 from fastapi import APIRouter, Request, Form, Depends, HTTPException, status, UploadFile, File
 from fastapi.templating import Jinja2Templates
@@ -25,7 +26,7 @@ from app.auth import (
     get_password_hash, create_access_token
 )
 from app.config import (
-    CLIENTS_DIR, QR_DIR, SERVER_PUBLIC_IP, AWG_PORT, AWG_CONFIG_FILE,
+    BASE_DIR, CLIENTS_DIR, QR_DIR, SERVER_PUBLIC_IP, AWG_PORT, AWG_CONFIG_FILE,
     DATA_DIR, logger
 )
 from app.vpn_manager import (
@@ -44,6 +45,14 @@ LOGIN_FAILURES: dict[str, list[float]] = {}
 LOGIN_LIMIT_WINDOW_SECONDS = 10 * 60
 LOGIN_BLOCK_SECONDS = 10 * 60
 LOGIN_MAX_FAILURES = 5
+
+SPLIT_TUNNEL_PRESETS = {
+    "Telegram": ["telegram.org", "t.me", "tdesktop.com"],
+    "Discord": ["discord.com", "discordapp.com", "discord.gg"],
+    "YouTube": ["youtube.com", "youtu.be", "googlevideo.com", "ytimg.com"],
+    "OpenAI": ["openai.com", "chatgpt.com", "oaistatic.com", "oaiusercontent.com"],
+    "Cloudflare": ["1.1.1.1/32", "1.0.0.1/32", "cloudflare.com"],
+}
 
 # Вспомогательная функция для форматирования дат в шаблонах Jinja
 def format_datetime(value: str) -> str:
@@ -136,6 +145,107 @@ def _vpn_config_checks() -> list[dict]:
         "message": "OK" if "S3 =" not in legacy_text and "S4 =" not in legacy_text else "Legacy config contains S3/S4",
     })
     return checks
+
+def _bool_check(name: str, ok: bool, good: str, bad: str) -> dict:
+    return {"name": name, "ok": bool(ok), "message": good if ok else bad}
+
+def _client_health_checks(client: dict) -> list[dict]:
+    connection_statuses = get_client_connection_statuses()
+    traffic_usage = get_clients_traffic_usage()
+    connection = connection_statuses.get(client["public_key"], {})
+    usage = traffic_usage.get(client["public_key"], {})
+    preshared_key = client.get("preshared_key") or ""
+    legacy_config = generate_legacy_client_config(
+        client["ip_address"], client["private_key"], preshared_key=preshared_key
+    )
+    v2_config = generate_client_config(
+        client["ip_address"], client["private_key"], preshared_key=preshared_key
+    )
+    split_config = generate_client_config(
+        client["ip_address"], client["private_key"], split_tunnel=True, preshared_key=preshared_key
+    )
+    checks = [
+        _bool_check("Клиент найден в базе", True, client["name"], "Клиент не найден"),
+        _bool_check(
+            "Peer есть на сервере",
+            bool(connection),
+            f"интерфейс: {connection.get('interface', 'неизвестно')}",
+            "peer пока не найден в awg show",
+        ),
+        _bool_check(
+            "Amnezia 1 без S3/S4",
+            "S3 =" not in legacy_config and "S4 =" not in legacy_config,
+            "Legacy-конфиг совместим с Amnezia 1",
+            "Legacy-конфиг содержит S3/S4",
+        ),
+        _bool_check(
+            "Amnezia 2.0 содержит S3/S4",
+            "S3 =" in v2_config and "S4 =" in v2_config,
+            "Amnezia 2.0-конфиг полный",
+            "В Amnezia 2.0-конфиге не хватает S3/S4",
+        ),
+        _bool_check(
+            "Split-конфиг отличается от full",
+            "AllowedIPs = 0.0.0.0/0, ::/0" not in split_config,
+            "AllowedIPs ограничены split-маршрутами",
+            "Split сейчас выглядит как полный туннель",
+        ),
+    ]
+    if connection.get("latest_handshake"):
+        checks.append({
+            "name": "Последний handshake",
+            "ok": True,
+            "message": _last_seen_text(connection.get("seconds_ago")),
+        })
+    else:
+        checks.append({"name": "Последний handshake", "ok": False, "message": "подключений еще не было"})
+    checks.append({
+        "name": "Трафик на сервере",
+        "ok": True,
+        "message": f"{format_bytes(int(usage.get('rx', 0)))} received / {format_bytes(int(usage.get('tx', 0)))} sent",
+    })
+    return checks
+
+def _security_checks(user: dict) -> list[dict]:
+    from app.auth import verify_password
+    from app.vpn_manager import get_vpn_setting
+
+    panel_domain = get_panel_setting("panel_domain", os.getenv("PANEL_DOMAIN", ""))
+    panel_port = get_panel_setting("panel_port", os.getenv("PANEL_PORT", "80"))
+    web_path = os.getenv("PANEL_WEB_PATH", "")
+    https_enabled = os.getenv("PANEL_HTTPS", "") == "1"
+    api_token = os.getenv("TELEGRAM_API_TOKEN") or os.getenv("API_TOKEN") or ""
+    public_ip = get_vpn_setting("public_ip", SERVER_PUBLIC_IP)
+    cert_name = os.getenv("PANEL_CERT_NAME", panel_domain or public_ip)
+    cert_path = Path(f"/etc/letsencrypt/live/{cert_name}/fullchain.pem")
+    default_password = verify_password("admin", user.get("password_hash", ""))
+    return [
+        _bool_check("HTTPS", https_enabled and cert_path.exists(), "сертификат найден и HTTPS включен", "HTTPS или сертификат не найдены"),
+        _bool_check("Секретный web path", bool(web_path and web_path != "/"), web_path or "не задан", "секретный путь не задан"),
+        _bool_check("Пароль администратора", not default_password and not user.get("must_change_password"), "пароль не стандартный", "нужно сменить admin/admin"),
+        _bool_check("API token", len(api_token) >= 24, "токен задан", "токен пустой или слишком короткий"),
+        _bool_check("Порт панели", str(panel_port) not in {"80", "8080"}, f"порт {panel_port}", "лучше использовать нестандартный порт за HTTPS/proxy"),
+        _bool_check("Домен панели", bool(panel_domain), panel_domain or "домен не задан", "домен не задан, используется IP"),
+    ]
+
+def _panel_update_info() -> dict:
+    project_dir = os.getenv("BLITZ_PROJECT_DIR", str(BASE_DIR))
+    command = f"cd {shlex.quote(project_dir)} && git pull origin main && docker compose --profile ssl up -d --build"
+    enabled = os.getenv("BLITZ_ENABLE_WEB_UPDATE", "0") == "1"
+    current = "unknown"
+    try:
+        proc = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=BASE_DIR, capture_output=True, text=True, timeout=5)
+        if proc.returncode == 0:
+            current = proc.stdout.strip()
+    except Exception:
+        pass
+    return {
+        "enabled": enabled,
+        "current": current,
+        "project_dir": project_dir,
+        "command": command,
+        "note": "Web-обновление выключено по умолчанию. Включается только env BLITZ_ENABLE_WEB_UPDATE=1.",
+    }
 
 PANEL_ENV_FILE = DATA_DIR / "panel.env"
 DOMAIN_RE = re.compile(r"^(?=.{1,253}$)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$")
@@ -470,6 +580,44 @@ async def check_vpn_config(
     checks = _vpn_config_checks()
     return JSONResponse({"ok": all(item["ok"] for item in checks), "checks": checks})
 
+@router.get("/settings/security/check")
+async def check_security_status(
+    user: dict = Depends(check_password_change_required)
+):
+    checks = _security_checks(user)
+    return JSONResponse({"ok": all(item["ok"] for item in checks), "checks": checks})
+
+@router.get("/panel/update/status")
+async def panel_update_status(
+    user: dict = Depends(check_password_change_required)
+):
+    return JSONResponse(_panel_update_info())
+
+@router.post("/panel/update/run")
+async def panel_update_run(
+    user: dict = Depends(check_password_change_required)
+):
+    info = _panel_update_info()
+    if not info["enabled"]:
+        return JSONResponse({"ok": False, **info}, status_code=403)
+    try:
+        proc = subprocess.run(
+            ["bash", "-lc", info["command"]],
+            cwd=info["project_dir"],
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        log_event("panel_update_requested", "Запущено обновление панели из web UI.", meta={"returncode": proc.returncode})
+        return JSONResponse({
+            "ok": proc.returncode == 0,
+            "returncode": proc.returncode,
+            "stdout": proc.stdout[-4000:],
+            "stderr": proc.stderr[-4000:],
+        })
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+
 @router.get("/", response_class=HTMLResponse)
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard_page(
@@ -507,6 +655,8 @@ async def dashboard_page(
             "awg_port": AWG_PORT,
             "config_path": str(AWG_CONFIG_FILE),
             "stats": dashboard_stats,
+            "security_checks": _security_checks(user),
+            "panel_update": _panel_update_info(),
             "current_page": "dashboard"
         }
     )
@@ -591,10 +741,28 @@ async def client_detail_page(
         context={
             "user": user,
             "client": client,
+            "checks": _client_health_checks(dict(row)) if dict(row).get("route_type", "local") != "cascade" else [],
             "events": get_events(50),
             "current_page": "clients",
         },
     )
+
+@router.get("/clients/{client_id}/check")
+async def check_client_status(
+    client_id: str,
+    user: dict = Depends(check_password_change_required),
+):
+    conn = get_db_connection()
+    row = conn.execute("SELECT * FROM clients WHERE id = ? AND deleted_at IS NULL", (client_id,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="Клиент не найден")
+    client = dict(row)
+    if client.get("route_type") == "cascade":
+        checks = [_bool_check("Каскадный клиент", True, "проверяется на целевой панели", "")]
+    else:
+        checks = _client_health_checks(client)
+    return JSONResponse({"ok": all(item["ok"] for item in checks), "checks": checks})
 
 
 @router.post("/clients/bulk")
@@ -1039,6 +1207,7 @@ async def vpn_settings_page(
         context={
             "user": user,
             "settings": settings,
+            "split_presets": SPLIT_TUNNEL_PRESETS,
             "current_page": "vpn_settings"
         }
     )
@@ -1171,6 +1340,7 @@ async def save_vpn_settings(
             "settings": settings,
             "success": success_msg,
             "error": error_msg,
+            "split_presets": SPLIT_TUNNEL_PRESETS,
             "current_page": "vpn_settings"
         }
     )

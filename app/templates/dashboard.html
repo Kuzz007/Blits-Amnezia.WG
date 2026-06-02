@@ -347,6 +347,40 @@
 
                     <section class="x-card">
                         <div class="x-card-header">
+                            <span class="x-card-title">Статус безопасности</span>
+                            <a class="btn btn-secondary btn-sm" href="/settings/panel"><i class="fa-solid fa-shield-halved"></i> Настройки</a>
+                        </div>
+                        <div class="x-card-body" style="display: flex; flex-direction: column; gap: 10px;">
+                            {% for check in security_checks %}
+                            <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
+                                <div>
+                                    <strong>{{ check.name }}</strong>
+                                    <div class="client-subtext">{{ check.message }}</div>
+                                </div>
+                                <span class="badge {% if check.ok %}badge-success{% else %}badge-danger{% endif %}">{% if check.ok %}OK{% else %}Проверить{% endif %}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </section>
+
+                    <section class="x-card">
+                        <div class="x-card-header">
+                            <span class="x-card-title">Обновление панели</span>
+                            <button class="btn btn-secondary btn-sm" onclick="runPanelUpdate()"><i class="fa-solid fa-cloud-arrow-down"></i> Обновить</button>
+                        </div>
+                        <div class="x-card-body">
+                            <div class="pill-row" style="margin-bottom: 12px;">
+                                <span class="x-pill">Версия: {{ panel_update.current }}</span>
+                                <span class="x-pill {% if panel_update.enabled %}green{% else %}orange{% endif %}">{% if panel_update.enabled %}Web update включен{% else %}Web update выключен{% endif %}</span>
+                            </div>
+                            <div class="client-subtext" style="margin-bottom: 8px;">Безопасный режим: если web update выключен, панель покажет команду для терминала.</div>
+                            <code id="panel-update-command" style="display:block;white-space:normal;word-break:break-word;background:var(--bg-main);border:1px solid var(--border-color);border-radius:8px;padding:10px;">{{ panel_update.command }}</code>
+                            <div id="panel-update-result" class="client-subtext" style="margin-top: 10px;"></div>
+                        </div>
+                    </section>
+
+                    <section class="x-card">
+                        <div class="x-card-header">
                             <span class="x-card-title">Резервные копии</span>
                         </div>
                         <div class="x-card-body">
@@ -586,6 +620,25 @@
         });
     </script>
 <script src="/static/i18n.js"></script>
+<script>
+async function runPanelUpdate() {
+    const result = document.getElementById('panel-update-result');
+    if (!confirm('Запустить обновление панели? Если web update выключен, будет показана команда для терминала.')) return;
+    result.textContent = 'Проверка режима обновления...';
+    try {
+        const response = await fetch('/panel/update/run', { method: 'POST', credentials: 'same-origin' });
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+            result.innerHTML = 'Web update выключен. Выполни команду выше в терминале сервера.';
+            return;
+        }
+        result.innerHTML = 'Обновление выполнено. Страница перезагрузится через несколько секунд.';
+        setTimeout(() => window.location.reload(), 3500);
+    } catch (error) {
+        result.textContent = 'Не удалось запустить обновление.';
+    }
+}
+</script>
 </body>
 </html>
 

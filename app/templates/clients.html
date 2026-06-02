@@ -174,11 +174,20 @@
                     </div>
                     <div class="card-body">
                         <form action="/clients/create" method="post">
-                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+                            <div class="wizard-steps" style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px;">
+                                <span class="badge badge-success" data-wizard-step="1">1. Имя</span>
+                                <span class="badge badge-gray" data-wizard-step="2">2. Сервер</span>
+                                <span class="badge badge-gray" data-wizard-step="3">3. Срок</span>
+                                <span class="badge badge-gray" data-wizard-step="4">4. Готово</span>
+                            </div>
+                            <div data-wizard-panel="1">
                                 <div class="form-group">
                                     <label for="name">Имя клиента / устройство</label>
                                     <input type="text" id="name" name="name" class="form-control" placeholder="например, user_iphone" required>
                                 </div>
+                                <span class="client-subtext">Лучше писать устройство или человека: iphone_pasha, laptop_home.</span>
+                            </div>
+                            <div data-wizard-panel="2" style="display:none;">
                                 <div class="form-group">
                                     <label for="route_type">Где создать ключ</label>
                                     <select id="route_type" name="route_type" class="form-control">
@@ -189,17 +198,28 @@
                                     <span class="client-subtext">Для каскада включите правила и укажите URL/API-токен целевой панели.</span>
                                     {% endif %}
                                 </div>
-                                <div class="form-group">
-                                    <label for="days">Дней действия</label>
-                                    <input type="number" id="days" name="days" class="form-control" value="30" min="1" required>
+                            </div>
+                            <div data-wizard-panel="3" style="display:none;">
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+                                    <div class="form-group">
+                                        <label for="days">Дней действия</label>
+                                        <input type="number" id="days" name="days" class="form-control" value="30" min="1" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="traffic_limit_gb">Лимит трафика (ГБ, 0 = безлимит)</label>
+                                        <input type="number" step="0.1" id="traffic_limit_gb" name="traffic_limit_gb" class="form-control" value="0" min="0" required>
+                                    </div>
                                 </div>
-                                <div class="form-group">
-                                    <label for="traffic_limit_gb">Лимит трафика (ГБ, 0 = безлимит)</label>
-                                    <input type="number" step="0.1" id="traffic_limit_gb" name="traffic_limit_gb" class="form-control" value="0" min="0" required>
+                            </div>
+                            <div data-wizard-panel="4" style="display:none;">
+                                <div class="alert alert-success">
+                                    <span><i class="fa-solid fa-circle-check"></i> После создания открой “Конфиг”: там будут Amnezia 1, Amnezia 2.0, Full и Split QR.</span>
                                 </div>
                             </div>
                             <div style="display: flex; gap: 12px; margin-top: 16px;">
-                                <button type="submit" class="btn btn-primary">Создать ключ</button>
+                                <button type="button" class="btn btn-secondary" onclick="moveWizard(-1)">Назад</button>
+                                <button type="button" class="btn btn-primary" onclick="moveWizard(1)" id="wizard-next">Дальше</button>
+                                <button type="submit" class="btn btn-primary" id="wizard-submit" style="display:none;">Создать ключ</button>
                                 <button type="button" class="btn btn-secondary" onclick="toggleCreateForm()">Отмена</button>
                             </div>
                         </form>
@@ -327,6 +347,9 @@
                                                 <button class="btn btn-secondary btn-sm" onclick="openConfigModal('{{ client.id }}')">
                                                     <i class="fa-solid fa-key"></i> Конфиг
                                                 </button>
+                                                <button class="btn btn-secondary btn-sm" onclick="checkClient('{{ client.id }}', '{{ client.name }}')">
+                                                    <i class="fa-solid fa-stethoscope"></i> Проверить
+                                                </button>
                                                 <form action="/clients/{{ client.id }}/extend" method="post" style="display:inline;">
                                                     <input type="hidden" name="days" value="30">
                                                     <button type="submit" class="btn btn-secondary btn-sm" title="Продлить на 30 дней">
@@ -356,6 +379,21 @@
                 </div>
             </div>
         </main>
+    </div>
+
+    <div id="client-check-modal" class="modal">
+        <div class="modal-content" style="max-width: 620px;">
+            <div class="modal-header">
+                <h3 id="client-check-title" class="modal-title">Проверка клиента</h3>
+                <button class="close-btn" onclick="closeClientCheck()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="client-check-body" style="display: flex; flex-direction: column; gap: 10px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary btn-sm" onclick="closeClientCheck()">Закрыть</button>
+            </div>
+        </div>
     </div>
 
     <div id="config-modal" class="modal">
@@ -433,10 +471,33 @@
     </div>
 
     <script>
+        let wizardStep = 1;
+
         function toggleCreateForm() {
             const card = document.getElementById('create-client-card');
             card.style.display = card.style.display === 'none' ? 'block' : 'none';
-            if (card.style.display === 'block') document.getElementById('name').focus();
+            if (card.style.display === 'block') {
+                wizardStep = 1;
+                renderWizard();
+                document.getElementById('name').focus();
+            }
+        }
+
+        function renderWizard() {
+            document.querySelectorAll('[data-wizard-panel]').forEach((panel) => {
+                panel.style.display = panel.dataset.wizardPanel === String(wizardStep) ? 'block' : 'none';
+            });
+            document.querySelectorAll('[data-wizard-step]').forEach((step) => {
+                step.className = step.dataset.wizardStep === String(wizardStep) ? 'badge badge-success' : 'badge badge-gray';
+            });
+            document.getElementById('wizard-next').style.display = wizardStep >= 4 ? 'none' : 'inline-flex';
+            document.getElementById('wizard-submit').style.display = wizardStep >= 4 ? 'inline-flex' : 'none';
+        }
+
+        function moveWizard(delta) {
+            if (delta > 0 && wizardStep === 1 && !document.getElementById('name').reportValidity()) return;
+            wizardStep = Math.min(4, Math.max(1, wizardStep + delta));
+            renderWizard();
         }
 
         if (new URLSearchParams(window.location.search).get('create') === 'true') toggleCreateForm();
@@ -454,6 +515,33 @@
         let currentVersion = "2.0";
         let qrSeriesState = {};
         let qrTimers = {};
+
+        async function checkClient(clientId, clientName) {
+            const modal = document.getElementById('client-check-modal');
+            const body = document.getElementById('client-check-body');
+            document.getElementById('client-check-title').innerText = 'Проверка клиента: ' + clientName;
+            body.innerHTML = '<span class="client-subtext">Проверка...</span>';
+            modal.classList.add('active');
+            try {
+                const response = await fetch('/clients/' + clientId + '/check', { credentials: 'same-origin' });
+                const data = await response.json();
+                body.innerHTML = data.checks.map((item) => `
+                    <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:12px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-main);">
+                        <div>
+                            <div style="font-weight:700;color:var(--dark);">${item.name}</div>
+                            <div class="client-subtext">${item.message}</div>
+                        </div>
+                        <span class="badge ${item.ok ? 'badge-success' : 'badge-danger'}">${item.ok ? 'OK' : 'Ошибка'}</span>
+                    </div>
+                `).join('');
+            } catch (error) {
+                body.innerHTML = '<span class="badge badge-danger">Не удалось выполнить проверку</span>';
+            }
+        }
+
+        function closeClientCheck() {
+            document.getElementById('client-check-modal').classList.remove('active');
+        }
 
         function openConfigModal(clientId) {
             const dataEl = document.getElementById('data-' + clientId);
@@ -689,7 +777,9 @@
 
         window.onclick = function(event) {
             const modal = document.getElementById('config-modal');
+            const checkModal = document.getElementById('client-check-modal');
             if (event.target === modal) closeConfigModal();
+            if (event.target === checkModal) closeClientCheck();
         }
     </script>
 <script src="/static/i18n.js"></script>
