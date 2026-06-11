@@ -601,26 +601,53 @@ async def finalize_create(message, state: FSMContext, callback: CallbackQuery = 
         await callback.answer("✅ Клиент создан!")
 
     client_id = c["client_id"]
+    is_disabled = bool(c.get("disabled_at"))
+    status_emoji = client_status_emoji(c)
+    if is_disabled:
+        status_text = "Отключен"
+    elif status_emoji == "🟡":
+        status_text = "Истёк"
+    else:
+        status_text = "Активен"
+
+    # Трафик
+    used = human_bytes(c.get("traffic_used_bytes", 0))
+    limit_gb = c.get("traffic_limit_gb", 0)
+    limit_str = f"{limit_gb} GB" if limit_gb and limit_gb > 0 else "безлимит"
+
+    # Прогресс трафика
+    if limit_gb and limit_gb > 0:
+        used_bytes = c.get("traffic_used_bytes", 0)
+        limit_bytes = limit_gb * (1024 ** 3)
+        pct = min(100, int(used_bytes / limit_bytes * 100)) if limit_bytes > 0 else 0
+        filled = pct // 10
+        bar = "■" * filled + "□" * (10 - filled)
+        traffic_line = f"<code>{used} / {limit_str}</code> [<code>{bar}</code>] {pct}%"
+    else:
+        traffic_line = f"<code>{used} / {limit_str}</code>"
+
+    exp_days = expires_in(c.get("expires_at"))
+
     text = (
         f"✅ <b>Клиент создан!</b>\n"
-        f"{'─' * 28}\n"
-        f"👤 Имя: <b>{c.get('name')}</b>\n"
-        f"🆔 ID: <code>{client_id}</code>\n"
-        f"🌐 IP: <code>{c.get('ip_address')}</code>\n"
-        f"📅 Срок: {days} дн.\n"
-        f"📊 Лимит: {traffic} GB\n"
-        f"⏰ Истекает: {format_date(c.get('expires_at'))}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 <b>Имя:</b> <b>{c.get('name', '???')}</b>\n"
+        f"📌 <b>Статус:</b> {status_text}\n"
+        f"🌐 <b>IP-адрес:</b> <code>{c.get('ip_address', '—')}</code>\n"
+        f"📊 <b>Трафик:</b> {traffic_line}\n"
+        f"⏰ <b>Истекает:</b> <code>{format_date(c.get('expires_at'))}</code>\n"
+        f"⏳ <b>Осталось:</b> {exp_days}\n"
     )
 
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="📱 QR-код", callback_data=f"client:qr:{client_id}"),
-            InlineKeyboardButton(text="🔗 Deep Link", callback_data=f"client:link:{client_id}"),
-        ],
-        [InlineKeyboardButton(text="📄 Конфиг (.conf)", callback_data=f"client:conf:{client_id}")],
-        [InlineKeyboardButton(text="📋 К списку клиентов", callback_data="clients:list:0")],
-        [InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu")],
-    ])
+    if c.get("telegram_id"):
+        text += f"👤 <b>Telegram ID:</b> <code>{c['telegram_id']}</code>\n"
+
+    text += (
+        f"━━━━━━━━━━━━━━━━━━━━━\n"
+        f"⚙️ <b>ID:</b> <code>{client_id}</code>"
+    )
+
+    kb = client_detail_kb(client_id, is_disabled)
     await target.edit_text(text, reply_markup=kb, parse_mode=ParseMode.HTML)
 
 # ── QR-код ──
