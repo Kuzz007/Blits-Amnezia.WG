@@ -25,7 +25,7 @@ from aiogram.enums import ParseMode
 
 # ─── Конфигурация ────────────────────────────────────────────────────────────
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8723396773:AAFB10nuk1ULJAY2lAQ6w5D41j3ssHyvK4M")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 PANEL_PORT = os.getenv("PANEL_PORT", "8080")
 PANEL_URL = os.getenv("PANEL_URL", f"http://127.0.0.1:{PANEL_PORT}")
 API_TOKEN = os.getenv("TELEGRAM_API_TOKEN", os.getenv("API_TOKEN", ""))

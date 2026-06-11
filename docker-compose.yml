@@ -28,7 +28,6 @@ services:
     restart: always
     network_mode: host
     environment:
-      - BOT_TOKEN=${BOT_TOKEN:-8723396773:AAFB10nuk1ULJAY2lAQ6w5D41j3ssHyvK4M}
       - ADMIN_IDS=${ADMIN_IDS:-}
     env_file:
       - path: ./data/panel.env
