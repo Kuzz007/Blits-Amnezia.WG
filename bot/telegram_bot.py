@@ -26,8 +26,9 @@ from aiogram.enums import ParseMode
 # ─── Конфигурация ────────────────────────────────────────────────────────────
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8723396773:AAFB10nuk1ULJAY2lAQ6w5D41j3ssHyvK4M")
-PANEL_URL = os.getenv("PANEL_URL", "http://127.0.0.1:8080")
-API_TOKEN = os.getenv("TELEGRAM_API_TOKEN", "awg_bot_api_token_71fb589254d3bc7e0da1a2ef490d1bc7")
+PANEL_PORT = os.getenv("PANEL_PORT", "8080")
+PANEL_URL = os.getenv("PANEL_URL", f"http://127.0.0.1:{PANEL_PORT}")
+API_TOKEN = os.getenv("TELEGRAM_API_TOKEN", os.getenv("API_TOKEN", ""))
 
 # Список Telegram ID администраторов (через запятую в env)
 ADMIN_IDS_RAW = os.getenv("ADMIN_IDS", "")
