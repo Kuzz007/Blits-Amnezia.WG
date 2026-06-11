@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
@@ -80,12 +80,12 @@
                     <div class="card-body" style="display: flex; flex-direction: column; gap: 22px;">
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
                             <div class="form-group" style="margin-bottom: 0;">
-                                <label for="panel_port">Порт панели</label>
-                                <input type="number" id="panel_port" name="panel_port" class="form-control" value="{{ settings.panel_port }}" required min="1" max="65535">
+                                <label for="panel_port">Порт панели <span style="font-size: 11px; color: var(--text-muted); font-weight: normal;">(только чтение)</span></label>
+                                <input type="number" id="panel_port" class="form-control" value="{{ settings.panel_port }}" readonly style="background: var(--bg-secondary); cursor: not-allowed; opacity: 0.8;">
                             </div>
                             <div class="form-group" style="margin-bottom: 0;">
-                                <label for="panel_domain">Домен панели</label>
-                                <input type="text" id="panel_domain" name="panel_domain" class="form-control" value="{{ settings.panel_domain }}" placeholder="panel.example.com">
+                                <label for="panel_domain">Домен панели <span style="font-size: 11px; color: var(--text-muted); font-weight: normal;">(только чтение)</span></label>
+                                <input type="text" id="panel_domain" class="form-control" value="{{ settings.panel_domain }}" readonly style="background: var(--bg-secondary); cursor: not-allowed; opacity: 0.8;" placeholder="не привязан">
                             </div>
                         </div>
 
@@ -142,6 +142,9 @@
                                 <br>После настройки DNS и прокси домен можно будет использовать как
                                 <strong style="color: var(--text-primary);">{{ settings.panel_domain }}</strong>.
                                 {% endif %}
+                                <div style="margin-top: 8px; color: var(--text-muted); font-size: 12px; border-top: 1px solid var(--border-color); padding-top: 8px;">
+                                    <i class="fa-solid fa-circle-info"></i> Изменение порта и домена производится через консольное меню на сервере: <code>./blits</code>
+                                </div>
                             </div>
                         </div>
 

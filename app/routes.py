@@ -935,6 +935,18 @@ async def web_create_client(
     route_type: str = Form("local"),
     user: dict = Depends(check_password_change_required)
 ):
+    # Санация имени клиента
+    name = re.sub(r'[\r\n]', ' ', name).strip()
+    name = re.sub(r'[\\\'"`;|&<>$]', '', name)
+    if not name:
+        name = "client"
+
+    # Валидация дней
+    if days < 1:
+        days = 1
+    elif days > 36500:
+        days = 36500
+
     client_id = str(uuid.uuid4())
     logger.info(f"Создание клиента через UI: '{name}' (id: {client_id})")
     
@@ -1531,65 +1543,6 @@ async def save_panel_settings(
     response.set_cookie("panel_lang", language_value, max_age=60 * 60 * 24 * 365, samesite="lax")
     return response
 
-    try:
-        port_value = _validated_int_setting("Порт панели", port_value, 1, 65535)
-        if theme_value not in {"light", "dark"}:
-            raise ValueError("Тема панели должна быть light или dark")
-        if language_value not in {"ru", "en"}:
-            raise ValueError("Panel language must be ru or en")
-        reserved_ports = {
-            "22": "SSH",
-            get_vpn_setting("port", str(AWG_PORT)): "Amnezia 2.0",
-            get_vpn_setting("legacy_port", "43913"): "Amnezia Legacy",
-        }
-        if port_value in reserved_ports:
-            raise ValueError(f"Порт {port_value} уже используется для {reserved_ports[port_value]}")
-        if domain_value and not DOMAIN_RE.match(domain_value):
-            raise ValueError("Домен должен быть в формате example.com без http:// и пути")
-
-        old_port = get_panel_setting("panel_port", os.getenv("PANEL_PORT", "8080"))
-        set_panel_setting("panel_port", port_value)
-        set_panel_setting("panel_domain", domain_value)
-        set_panel_setting("panel_theme", theme_value)
-        set_panel_setting("panel_language", language_value)
-        set_panel_setting("telegram_notifications_enabled", telegram_enabled_value)
-        set_panel_setting("telegram_admin_bot_token", telegram_token_value)
-        set_panel_setting("telegram_admin_chat_id", telegram_chat_id_value)
-        write_panel_env(port_value)
-
-        if port_value != old_port and os.name != "nt":
-            restart_panel_service_later()
-            success_msg = f"Настройки сохранены. Панель перезапустится на порту {port_value} через пару секунд."
-        else:
-            success_msg = "Настройки панели сохранены."
-    except Exception as e:
-        logger.error(f"Не удалось сохранить настройки панели: {e}")
-        error_msg = str(e)
-
-    settings = {
-        "panel_port": port_value,
-        "panel_domain": domain_value,
-        "panel_theme": theme_value,
-        "panel_language": language_value,
-        "telegram_notifications_enabled": telegram_enabled_value,
-        "telegram_admin_bot_token": telegram_token_value,
-        "telegram_admin_chat_id": telegram_chat_id_value,
-        "public_ip": SERVER_PUBLIC_IP,
-    }
-    response = templates.TemplateResponse(
-        request=request,
-        name="panel_settings.html",
-        context={
-            "user": user,
-            "settings": settings,
-            "success": success_msg,
-            "error": error_msg,
-            "current_page": "panel_settings"
-        }
-    )
-    response.set_cookie("panel_theme", theme_value, max_age=60 * 60 * 24 * 365, samesite="lax")
-    response.set_cookie("panel_lang", language_value, max_age=60 * 60 * 24 * 365, samesite="lax")
-    return response
 
 @router.post("/settings/panel/theme")
 async def save_panel_theme(

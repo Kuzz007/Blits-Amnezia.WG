@@ -1,4 +1,5 @@
 import uuid
+import re
 import datetime
 import qrcode
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -22,6 +23,12 @@ async def create_client(payload: ClientCreate, api_token: str = Depends(verify_a
     Создает нового пира AmneziaWG. Добавляет в БД, генерирует .conf и QR-код,
     пересобирает и синхронизирует конфигурационный файл сервера.
     """
+    # Санация имени клиента
+    payload.name = re.sub(r'[\r\n]', ' ', payload.name).strip()
+    payload.name = re.sub(r'[\\\'"`;|&<>$]', '', payload.name)
+    if not payload.name:
+        payload.name = "client"
+
     client_id = str(uuid.uuid4())
     logger.info(f"API запрос на создание клиента '{payload.name}' (id: {client_id})")
     

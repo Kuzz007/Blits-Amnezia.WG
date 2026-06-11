@@ -4,11 +4,11 @@ from typing import Optional, List
 class ClientCreate(BaseModel):
     name: str = Field(..., description="Имя клиента, например telegram_123456")
     telegram_id: Optional[int] = Field(None, description="Telegram ID клиента")
-    days: int = Field(default=30, ge=1, description="Количество дней действия ключа")
+    days: int = Field(default=30, ge=1, le=36500, description="Количество дней действия ключа")
     traffic_limit_gb: float = Field(default=0.0, ge=0, description="Лимит трафика в ГБ (0 = безлимит)")
 
 class ClientExtend(BaseModel):
-    days: int = Field(..., ge=1, description="На сколько дней продлить ключ")
+    days: int = Field(..., ge=1, le=36500, description="На сколько дней продлить ключ")
 
 class ClientResponse(BaseModel):
     client_id: str

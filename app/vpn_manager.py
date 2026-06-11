@@ -688,7 +688,8 @@ def rebuild_and_sync_vpn_config():
     
     # 3. Добавляем пиров
     for client in clients:
-        config_lines.append(f"# ClientName: {client['name']}")
+        clean_name = re.sub(r'[\r\n]', ' ', client['name'] or '')
+        config_lines.append(f"# ClientName: {clean_name}")
         config_lines.append(f"# ClientID: {client['id']}")
         config_lines.append("[Peer]")
         config_lines.append(f"PublicKey = {client['public_key']}")
@@ -802,8 +803,9 @@ def rebuild_and_sync_legacy_vpn_config():
     ]
 
     for client in clients:
+        clean_name = re.sub(r'[\r\n]', ' ', client['name'] or '')
         config_lines.extend([
-            f"# ClientName: {client['name']}",
+            f"# ClientName: {clean_name}",
             f"# ClientID: {client['id']}",
             "[Peer]",
             f"PublicKey = {client['public_key']}",
