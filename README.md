@@ -39,7 +39,7 @@
 Выполните команду на сервере для запуска автоматической интерактивной установки:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/kuznecovpasa807-ui/Blits-Amnezia.WG/main/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/Blits-dev-vibe/Blits-Amnezia.WG/main/install.sh)
 ```
 
 ### 🤖 Автоматическая (тихая) установка
@@ -47,7 +47,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/kuznecovpasa807-ui/Blits-Amn
 
 ```bash
 # Пример бесшумной установки на 80 порт с кастомным паролем
-bash <(curl -fsSL https://raw.githubusercontent.com/kuznecovpasa807-ui/Blits-Amnezia.WG/main/install.sh) -y --port 80 --password "MySuperSecurePassword123!"
+bash <(curl -fsSL https://raw.githubusercontent.com/Blits-dev-vibe/Blits-Amnezia.WG/main/install.sh) -y --port 80 --password "MySuperSecurePassword123!"
 ```
 
 ---
