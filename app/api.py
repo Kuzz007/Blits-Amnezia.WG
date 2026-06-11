@@ -2,6 +2,7 @@ import uuid
 import re
 import datetime
 import qrcode
+from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 from app.models import ClientCreate, ClientExtend, ClientResponse, TokenRequest
@@ -136,6 +137,68 @@ async def create_client(payload: ClientCreate, api_token: str = Depends(verify_a
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Внутренняя ошибка сервера: {str(e)}"
         )
+
+@router.get("/clients", response_model=List[ClientResponse])
+async def list_clients_api(api_token: str = Depends(verify_api_token)):
+    """
+    Возвращает список всех клиентов (кроме мягко удаленных).
+    """
+    conn = get_db_connection()
+    rows = conn.execute("SELECT * FROM clients WHERE deleted_at IS NULL").fetchall()
+    conn.close()
+    
+    clients = []
+    for row in rows:
+        client = dict(row)
+        client_id = client['id']
+        config_text = generate_client_config(client['ip_address'], client['private_key'], preshared_key=client['preshared_key'])
+        conf_download_url = f"/clients/{client_id}/download"
+        qr_url = f"/clients/{client_id}/qr"
+        qr_url_v2 = f"/clients/{client_id}/qr?version=2.0"
+        qr_url_split = f"/clients/{client_id}/qr?split=true"
+        qr_url_split_v2 = f"/clients/{client_id}/qr?split=true&version=2.0"
+        qr_series_url = f"/clients/{client_id}/qr-series"
+        qr_series_url_v2 = f"/clients/{client_id}/qr-series?version=2.0"
+        qr_series_url_split = f"/clients/{client_id}/qr-series?split=true"
+        qr_series_url_split_v2 = f"/clients/{client_id}/qr-series?split=true&version=2.0"
+        config_text_legacy = generate_legacy_client_config(client['ip_address'], client['private_key'], preshared_key=client['preshared_key'])
+        deep_link = generate_amnezia_deeplink(config_text_legacy, version="1.0", client_public_key=client['public_key'], client_name=client['name'])
+        deep_link_v2 = generate_amnezia_deeplink(config_text, version="2.0", client_public_key=client['public_key'], client_name=client['name'])
+        
+        # Раздельный конфиг и ссылки (избирательный туннель)
+        config_text_split = generate_client_config(client['ip_address'], client['private_key'], split_tunnel=True, preshared_key=client['preshared_key'])
+        config_text_split_legacy = generate_legacy_client_config(client['ip_address'], client['private_key'], split_tunnel=True, preshared_key=client['preshared_key'])
+        deep_link_split = generate_amnezia_deeplink(config_text_split_legacy, version="1.0", client_public_key=client['public_key'], split_tunnel=True, client_name=client['name'])
+        deep_link_split_v2 = generate_amnezia_deeplink(config_text_split, version="2.0", client_public_key=client['public_key'], split_tunnel=True, client_name=client['name'])
+        
+        clients.append(ClientResponse(
+            client_id=client['id'],
+            name=client['name'],
+            telegram_id=client['telegram_id'],
+            ip_address=client['ip_address'],
+            public_key=client['public_key'],
+            traffic_limit_gb=client['traffic_limit_gb'],
+            traffic_used_bytes=client['traffic_used_bytes'],
+            expires_at=client['expires_at'],
+            created_at=client['created_at'],
+            disabled_at=client['disabled_at'],
+            config_text=config_text,
+            conf_download_url=conf_download_url,
+            qr_url=qr_url,
+            qr_url_v2=qr_url_v2,
+            qr_url_split=qr_url_split,
+            qr_url_split_v2=qr_url_split_v2,
+            qr_series_url=qr_series_url,
+            qr_series_url_v2=qr_series_url_v2,
+            qr_series_url_split=qr_series_url_split,
+            qr_series_url_split_v2=qr_series_url_split_v2,
+            deep_link=deep_link,
+            deep_link_v2=deep_link_v2,
+            config_text_split=config_text_split,
+            deep_link_split=deep_link_split,
+            deep_link_split_v2=deep_link_split_v2
+        ))
+    return clients
 
 @router.get("/clients/{client_id}", response_model=ClientResponse)
 async def get_client_api(client_id: str, api_token: str = Depends(verify_api_token)):
