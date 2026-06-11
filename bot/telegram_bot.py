@@ -180,20 +180,37 @@ def client_detail_kb(client_id: str, is_disabled: bool) -> InlineKeyboardMarkup:
     toggle_cb = f"client:enable:{client_id}" if is_disabled else f"client:disable:{client_id}"
 
     return InlineKeyboardMarkup(inline_keyboard=[
+        # Amnezia 2.0 (Полный)
         [
-            InlineKeyboardButton(text="📱 QR-код", callback_data=f"client:qr_menu:{client_id}"),
-            InlineKeyboardButton(text="🔗 Deep Link", callback_data=f"client:link_menu:{client_id}"),
+            InlineKeyboardButton(text="📱 QR 2.0", callback_data=f"client:qr_gen:v2:{client_id}"),
+            InlineKeyboardButton(text="📄 Conf 2.0", callback_data=f"client:conf_send:v2:{client_id}"),
+            InlineKeyboardButton(text="🔗 Link 2.0", callback_data=f"client:link_show:v2:{client_id}"),
         ],
+        # Amnezia 1.0 (Legacy)
         [
-            InlineKeyboardButton(text="📄 Конфиг", callback_data=f"client:conf_menu:{client_id}"),
+            InlineKeyboardButton(text="📱 QR 1.0", callback_data=f"client:qr_gen:v1:{client_id}"),
+            InlineKeyboardButton(text="📄 Conf 1.0", callback_data=f"client:conf_send:v1:{client_id}"),
+            InlineKeyboardButton(text="🔗 Link 1.0", callback_data=f"client:link_show:v1:{client_id}"),
+        ],
+        # Split (Раздельный)
+        [
+            InlineKeyboardButton(text="📱 QR Split", callback_data=f"client:qr_gen:split:{client_id}"),
+            InlineKeyboardButton(text="📄 Conf Split", callback_data=f"client:conf_send:split:{client_id}"),
+            InlineKeyboardButton(text="🔗 Link Split", callback_data=f"client:link_show:split:{client_id}"),
+        ],
+        # Management
+        [
+            InlineKeyboardButton(text=toggle_text, callback_data=toggle_cb),
             InlineKeyboardButton(text="⏳ Продлить", callback_data=f"client:extend:{client_id}"),
         ],
         [
-            InlineKeyboardButton(text=toggle_text, callback_data=toggle_cb),
-            InlineKeyboardButton(text="🗑 Удалить", callback_data=f"client:delete_ask:{client_id}"),
+            InlineKeyboardButton(text="🗑 Удалить клиента", callback_data=f"client:delete_ask:{client_id}"),
         ],
-        [InlineKeyboardButton(text="⬅️ Назад к списку", callback_data="clients:list:0")],
-        [InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu")],
+        # Navigation
+        [
+            InlineKeyboardButton(text="⬅️ Назад к списку", callback_data="clients:list:0"),
+            InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu"),
+        ],
     ])
 
 def confirm_delete_kb(client_id: str) -> InlineKeyboardMarkup:
@@ -202,36 +219,6 @@ def confirm_delete_kb(client_id: str) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"client:delete_yes:{client_id}"),
             InlineKeyboardButton(text="❌ Отмена", callback_data=f"client:{client_id}"),
         ]
-    ])
-
-def qr_menu_kb(client_id: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="Amnezia 2.0 (Полный)", callback_data=f"client:qr_gen:v2:{client_id}"),
-            InlineKeyboardButton(text="Amnezia 1.0 (Legacy)", callback_data=f"client:qr_gen:v1:{client_id}"),
-        ],
-        [InlineKeyboardButton(text="Раздельный (Split v2.0)", callback_data=f"client:qr_gen:split:{client_id}")],
-        [InlineKeyboardButton(text="⬅️ Назад к клиенту", callback_data=f"client:{client_id}")],
-    ])
-
-def link_menu_kb(client_id: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="Amnezia 2.0 (Полный)", callback_data=f"client:link_show:v2:{client_id}"),
-            InlineKeyboardButton(text="Amnezia 1.0 (Legacy)", callback_data=f"client:link_show:v1:{client_id}"),
-        ],
-        [InlineKeyboardButton(text="Раздельный (Split v2.0)", callback_data=f"client:link_show:split:{client_id}")],
-        [InlineKeyboardButton(text="⬅️ Назад к клиенту", callback_data=f"client:{client_id}")],
-    ])
-
-def conf_menu_kb(client_id: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="Amnezia 2.0 (Полный)", callback_data=f"client:conf_send:v2:{client_id}"),
-            InlineKeyboardButton(text="Amnezia 1.0 (Legacy)", callback_data=f"client:conf_send:v1:{client_id}"),
-        ],
-        [InlineKeyboardButton(text="Раздельный (Split v2.0)", callback_data=f"client:conf_send:split:{client_id}")],
-        [InlineKeyboardButton(text="⬅️ Назад к клиенту", callback_data=f"client:{client_id}")],
     ])
 
 def back_to_client_kb(client_id: str) -> InlineKeyboardMarkup:
@@ -406,11 +393,17 @@ async def show_client_detail(message, client_id: str):
 
     status_emoji = client_status_emoji(c)
     is_disabled = bool(c.get("disabled_at"))
+    if is_disabled:
+        status_text = "Отключен"
+    elif status_emoji == "🟡":
+        status_text = "Истёк"
+    else:
+        status_text = "Активен"
 
     # Трафик
     used = human_bytes(c.get("traffic_used_bytes", 0))
     limit_gb = c.get("traffic_limit_gb", 0)
-    limit_str = f"{limit_gb} GB" if limit_gb and limit_gb > 0 else "∞"
+    limit_str = f"{limit_gb} GB" if limit_gb and limit_gb > 0 else "безлимит"
 
     # Прогресс трафика
     if limit_gb and limit_gb > 0:
@@ -418,27 +411,30 @@ async def show_client_detail(message, client_id: str):
         limit_bytes = limit_gb * (1024 ** 3)
         pct = min(100, int(used_bytes / limit_bytes * 100)) if limit_bytes > 0 else 0
         filled = pct // 10
-        bar = "█" * filled + "░" * (10 - filled)
-        traffic_line = f"📊 Трафик: {used} / {limit_str} [{bar}] {pct}%"
+        bar = "■" * filled + "□" * (10 - filled)
+        traffic_line = f"<code>{used} / {limit_str}</code> [<code>{bar}</code>] {pct}%"
     else:
-        traffic_line = f"📊 Трафик: {used} / {limit_str}"
+        traffic_line = f"<code>{used} / {limit_str}</code>"
 
-    status_text = "🔴 Отключён" if is_disabled else "🟢 Активен"
-    exp = expires_in(c.get("expires_at"))
+    exp_days = expires_in(c.get("expires_at"))
 
     text = (
         f"{status_emoji} <b>{c.get('name', '???')}</b>\n"
-        f"{'─' * 28}\n"
-        f"🆔 ID: <code>{c['client_id']}</code>\n"
-        f"🌐 IP: <code>{c.get('ip_address', '—')}</code>\n"
-        f"📌 Статус: {status_text}\n"
-        f"{traffic_line}\n"
-        f"📅 Создан: {format_date(c.get('created_at'))}\n"
-        f"⏰ Истекает: {format_date(c.get('expires_at'))} ({exp})\n"
+        f"━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📌 <b>Статус:</b> {status_text}\n"
+        f"🌐 <b>IP-адрес:</b> <code>{c.get('ip_address', '—')}</code>\n"
+        f"📊 <b>Трафик:</b> {traffic_line}\n"
+        f"⏰ <b>Истекает:</b> <code>{format_date(c.get('expires_at'))}</code>\n"
+        f"⏳ <b>Осталось:</b> {exp_days}\n"
     )
 
     if c.get("telegram_id"):
-        text += f"👤 Telegram: <code>{c['telegram_id']}</code>\n"
+        text += f"👤 <b>Telegram ID:</b> <code>{c['telegram_id']}</code>\n"
+
+    text += (
+        f"━━━━━━━━━━━━━━━━━━━━━\n"
+        f"⚙️ <b>ID:</b> <code>{c['client_id']}</code>"
+    )
 
     kb = client_detail_kb(client_id, is_disabled)
     await message.edit_text(text, reply_markup=kb, parse_mode=ParseMode.HTML)
@@ -766,24 +762,6 @@ async def cb_conf(callback: CallbackQuery):
     )
     await callback.answer()
 
-# ── Меню выбора версии Amnezia (QR, Link, Conf) ──
-
-@router.callback_query(F.data.startswith("client:qr_menu:"))
-async def cb_qr_menu(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
-        await callback.answer("⛔ Нет доступа", show_alert=True)
-        return
-    client_id = callback.data.split(":", 2)[2]
-    await callback.message.edit_text(
-        "📱 <b>Выбор версии для QR-кода</b>\n\n"
-        "Выберите формат AmneziaWG:\n"
-        "• <b>Amnezia 2.0</b> — для новых версий приложения AmneziaVPN (рекомендуется)\n"
-        "• <b>Amnezia 1.0 (Legacy)</b> — для старых версий приложения Amnezia\n"
-        "• <b>Раздельный (Split)</b> — для выборочного обхода блокировок",
-        parse_mode=ParseMode.HTML,
-        reply_markup=qr_menu_kb(client_id)
-    )
-    await callback.answer()
 
 @router.callback_query(F.data.startswith("client:qr_gen:"))
 async def cb_qr_gen(callback: CallbackQuery):
@@ -845,22 +823,6 @@ async def cb_qr_gen(callback: CallbackQuery):
             reply_markup=back_to_client_kb(client_id)
         )
 
-@router.callback_query(F.data.startswith("client:link_menu:"))
-async def cb_link_menu(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
-        await callback.answer("⛔ Нет доступа", show_alert=True)
-        return
-    client_id = callback.data.split(":", 2)[2]
-    await callback.message.edit_text(
-        "🔗 <b>Выбор версии для Deep Link</b>\n\n"
-        "Выберите формат ссылки импорта:\n"
-        "• <b>Amnezia 2.0</b> — для новых версий (протокол awg)\n"
-        "• <b>Amnezia 1.0 (Legacy)</b> — для старых версий (протокол wireguard)\n"
-        "• <b>Раздельный (Split)</b> — раздельный туннель",
-        parse_mode=ParseMode.HTML,
-        reply_markup=link_menu_kb(client_id)
-    )
-    await callback.answer()
 
 @router.callback_query(F.data.startswith("client:link_show:"))
 async def cb_link_show(callback: CallbackQuery):
@@ -917,22 +879,6 @@ async def cb_link_show(callback: CallbackQuery):
         )
     await callback.answer()
 
-@router.callback_query(F.data.startswith("client:conf_menu:"))
-async def cb_conf_menu(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
-        await callback.answer("⛔ Нет доступа", show_alert=True)
-        return
-    client_id = callback.data.split(":", 2)[2]
-    await callback.message.edit_text(
-        "📄 <b>Выбор версии для файла .conf</b>\n\n"
-        "Выберите формат конфига:\n"
-        "• <b>Amnezia 2.0</b> — полный конфиг (рекомендуется)\n"
-        "• <b>Amnezia 1.0 (Legacy)</b> — совместимый со стандартным WireGuard\n"
-        "• <b>Раздельный (Split)</b> — раздельный туннель",
-        parse_mode=ParseMode.HTML,
-        reply_markup=conf_menu_kb(client_id)
-    )
-    await callback.answer()
 
 @router.callback_query(F.data.startswith("client:conf_send:"))
 async def cb_conf_send(callback: CallbackQuery):
