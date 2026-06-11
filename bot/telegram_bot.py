@@ -557,7 +557,7 @@ async def finalize_create(message, state: FSMContext, callback: CallbackQuery = 
             "name": name,
             "days": days,
             "traffic_limit_gb": traffic,
-            "telegram_id": ""
+            "telegram_id": None
         }
         resp = await http.post("/api/v1/clients", json=payload)
         resp.raise_for_status()
