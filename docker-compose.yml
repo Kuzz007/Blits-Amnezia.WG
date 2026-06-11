@@ -20,6 +20,29 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  blits-bot:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile
+    container_name: blits-bot
+    restart: always
+    network_mode: host
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN:-8723396773:AAFB10nuk1ULJAY2lAQ6w5D41j3ssHyvK4M}
+      - PANEL_URL=http://127.0.0.1:${PANEL_PORT:-8080}
+      - TELEGRAM_API_TOKEN=${TELEGRAM_API_TOKEN:-awg_bot_api_token_71fb589254d3bc7e0da1a2ef490d1bc7}
+      - ADMIN_IDS=${ADMIN_IDS:-}
+    env_file:
+      - path: ./data/panel.env
+        required: false
+    depends_on:
+      - amnezia-panel
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   nginx-proxy:
     image: nginx:alpine
     container_name: nginx-proxy
