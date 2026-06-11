@@ -980,7 +980,18 @@ def generate_client_config(client_ip: str, client_private_key: str, split_tunnel
     i4 = get_vpn_setting("i4", "")
     i5 = get_vpn_setting("i5", "")
     
-    allowed_ips_str = ", ".join(get_split_tunnel_routes()) if split_tunnel else "0.0.0.0/0, ::/0"
+    if split_tunnel:
+        routes = list(get_split_tunnel_routes())
+        # Добавляем адреса DNS-серверов в AllowedIPs для предотвращения DNS-утечек через провайдера
+        for d in [ip.strip() for ip in dns.split(",") if ip.strip()]:
+            try:
+                addr = ipaddress.ip_address(d)
+                routes.append(f"{addr}/{'32' if addr.version == 4 else '128'}")
+            except Exception:
+                pass
+        allowed_ips_str = ", ".join(sorted(list(set(routes))))
+    else:
+        allowed_ips_str = "0.0.0.0/0, ::/0"
     
     config_lines = [
         "[Interface]",
@@ -1032,7 +1043,18 @@ def generate_legacy_client_config(client_ip: str, client_private_key: str, split
     h2 = get_vpn_setting("legacy_h2", get_vpn_setting("h2", "2056848576-2126223526"))
     h3 = get_vpn_setting("legacy_h3", get_vpn_setting("h3", "2141047196-2144456894"))
     h4 = get_vpn_setting("legacy_h4", get_vpn_setting("h4", "2146243463-2147170402"))
-    allowed_ips_str = ", ".join(get_split_tunnel_routes()) if split_tunnel else "0.0.0.0/0, ::/0"
+    if split_tunnel:
+        routes = list(get_split_tunnel_routes())
+        # Добавляем адреса DNS-серверов в AllowedIPs для предотвращения DNS-утечек через провайдера
+        for d in [ip.strip() for ip in dns.split(",") if ip.strip()]:
+            try:
+                addr = ipaddress.ip_address(d)
+                routes.append(f"{addr}/{'32' if addr.version == 4 else '128'}")
+            except Exception:
+                pass
+        allowed_ips_str = ", ".join(sorted(list(set(routes))))
+    else:
+        allowed_ips_str = "0.0.0.0/0, ::/0"
     legacy_ip = legacy_ip_from_client_ip(client_ip)
 
     config_lines = [
