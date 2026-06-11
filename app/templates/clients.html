@@ -475,7 +475,15 @@
             if (card.style.display === 'block') {
                 wizardStep = 1;
                 renderWizard();
-                document.getElementById('name').focus();
+                const nameInput = document.getElementById('name');
+                if (nameInput) nameInput.value = '';
+                const routeTypeInput = document.getElementById('route_type');
+                if (routeTypeInput) routeTypeInput.value = 'local';
+                const daysInput = document.getElementById('days');
+                if (daysInput) daysInput.value = '30';
+                const trafficInput = document.getElementById('traffic_limit_gb');
+                if (trafficInput) trafficInput.value = '0';
+                if (nameInput) nameInput.focus();
             }
         }
 

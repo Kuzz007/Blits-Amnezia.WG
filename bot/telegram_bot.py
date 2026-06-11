@@ -283,6 +283,7 @@ async def cmd_stats(message: Message):
 async def cmd_create(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
+    await state.clear()
     await state.set_state(CreateClient.name)
     await message.answer(
         "➕ <b>Создание нового клиента</b>\n\n"
@@ -446,6 +447,7 @@ async def cb_create_start(callback: CallbackQuery, state: FSMContext):
     if not is_admin(callback.from_user.id):
         await callback.answer("⛔ Нет доступа", show_alert=True)
         return
+    await state.clear()
     await state.set_state(CreateClient.name)
     await callback.message.edit_text(
         "➕ <b>Создание нового клиента</b>\n\n"
@@ -960,6 +962,7 @@ async def cb_extend(callback: CallbackQuery, state: FSMContext):
         await callback.answer("⛔ Нет доступа", show_alert=True)
         return
     client_id = callback.data.split(":", 2)[2]
+    await state.clear()
     await state.update_data(extend_client_id=client_id)
     await state.set_state(ExtendClient.days)
 
@@ -1140,6 +1143,7 @@ async def cb_search(callback: CallbackQuery, state: FSMContext):
     if not is_admin(callback.from_user.id):
         await callback.answer("⛔ Нет доступа", show_alert=True)
         return
+    await state.clear()
     await state.set_state(SearchClient.query)
     await callback.message.edit_text(
         "🔍 <b>Поиск клиента</b>\n\n"
@@ -1169,7 +1173,7 @@ async def search_handler(message: Message, state: FSMContext):
         if query in c.get("name", "").lower()
         or query in c.get("ip_address", "").lower()
         or query in c.get("client_id", "").lower()
-        or query in (c.get("telegram_id") or "").lower()
+        or query in str(c.get("telegram_id") or "").lower()
     ]
 
     if not results:
