@@ -34,6 +34,8 @@ class ClientResponse(BaseModel):
     deep_link: Optional[str]
     deep_link_v2: Optional[str]
     config_text_split: Optional[str] = None
+    config_text_legacy: Optional[str] = None
+    config_text_split_legacy: Optional[str] = None
     deep_link_split: Optional[str] = None
     deep_link_split_v2: Optional[str] = None
 

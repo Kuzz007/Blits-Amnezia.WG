@@ -181,11 +181,11 @@ def client_detail_kb(client_id: str, is_disabled: bool) -> InlineKeyboardMarkup:
 
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="📱 QR-код", callback_data=f"client:qr:{client_id}"),
-            InlineKeyboardButton(text="🔗 Deep Link", callback_data=f"client:link:{client_id}"),
+            InlineKeyboardButton(text="📱 QR-код", callback_data=f"client:qr_menu:{client_id}"),
+            InlineKeyboardButton(text="🔗 Deep Link", callback_data=f"client:link_menu:{client_id}"),
         ],
         [
-            InlineKeyboardButton(text="📄 Конфиг", callback_data=f"client:conf:{client_id}"),
+            InlineKeyboardButton(text="📄 Конфиг", callback_data=f"client:conf_menu:{client_id}"),
             InlineKeyboardButton(text="⏳ Продлить", callback_data=f"client:extend:{client_id}"),
         ],
         [
@@ -202,6 +202,36 @@ def confirm_delete_kb(client_id: str) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"client:delete_yes:{client_id}"),
             InlineKeyboardButton(text="❌ Отмена", callback_data=f"client:{client_id}"),
         ]
+    ])
+
+def qr_menu_kb(client_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="Amnezia 2.0 (Полный)", callback_data=f"client:qr_gen:v2:{client_id}"),
+            InlineKeyboardButton(text="Amnezia 1.0 (Legacy)", callback_data=f"client:qr_gen:v1:{client_id}"),
+        ],
+        [InlineKeyboardButton(text="Раздельный (Split v2.0)", callback_data=f"client:qr_gen:split:{client_id}")],
+        [InlineKeyboardButton(text="⬅️ Назад к клиенту", callback_data=f"client:{client_id}")],
+    ])
+
+def link_menu_kb(client_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="Amnezia 2.0 (Полный)", callback_data=f"client:link_show:v2:{client_id}"),
+            InlineKeyboardButton(text="Amnezia 1.0 (Legacy)", callback_data=f"client:link_show:v1:{client_id}"),
+        ],
+        [InlineKeyboardButton(text="Раздельный (Split v2.0)", callback_data=f"client:link_show:split:{client_id}")],
+        [InlineKeyboardButton(text="⬅️ Назад к клиенту", callback_data=f"client:{client_id}")],
+    ])
+
+def conf_menu_kb(client_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="Amnezia 2.0 (Полный)", callback_data=f"client:conf_send:v2:{client_id}"),
+            InlineKeyboardButton(text="Amnezia 1.0 (Legacy)", callback_data=f"client:conf_send:v1:{client_id}"),
+        ],
+        [InlineKeyboardButton(text="Раздельный (Split v2.0)", callback_data=f"client:conf_send:split:{client_id}")],
+        [InlineKeyboardButton(text="⬅️ Назад к клиенту", callback_data=f"client:{client_id}")],
     ])
 
 def back_to_client_kb(client_id: str) -> InlineKeyboardMarkup:
@@ -731,6 +761,219 @@ async def cb_conf(callback: CallbackQuery):
     await callback.message.answer_document(
         doc,
         caption=f"📄 Конфиг-файл для <b>{c.get('name', '???')}</b>",
+        parse_mode=ParseMode.HTML,
+        reply_markup=back_to_client_kb(client_id)
+    )
+    await callback.answer()
+
+# ── Меню выбора версии Amnezia (QR, Link, Conf) ──
+
+@router.callback_query(F.data.startswith("client:qr_menu:"))
+async def cb_qr_menu(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ Нет доступа", show_alert=True)
+        return
+    client_id = callback.data.split(":", 2)[2]
+    await callback.message.edit_text(
+        "📱 <b>Выбор версии для QR-кода</b>\n\n"
+        "Выберите формат AmneziaWG:\n"
+        "• <b>Amnezia 2.0</b> — для новых версий приложения AmneziaVPN (рекомендуется)\n"
+        "• <b>Amnezia 1.0 (Legacy)</b> — для старых версий приложения Amnezia\n"
+        "• <b>Раздельный (Split)</b> — для выборочного обхода блокировок",
+        parse_mode=ParseMode.HTML,
+        reply_markup=qr_menu_kb(client_id)
+    )
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("client:qr_gen:"))
+async def cb_qr_gen(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ Нет доступа", show_alert=True)
+        return
+    parts = callback.data.split(":", 3)
+    qr_type = parts[2]
+    client_id = parts[3]
+    await callback.answer("⏳ Генерирую QR-код...")
+
+    try:
+        resp = await http.get(f"/api/v1/clients/{client_id}")
+        resp.raise_for_status()
+        c = resp.json()
+    except Exception as e:
+        await callback.message.answer(f"❌ Ошибка: {e}")
+        return
+
+    if qr_type == "v1":
+        config_text = c.get("config_text_legacy") or ""
+        type_label = "Amnezia 1.0 (Legacy)"
+    elif qr_type == "split":
+        config_text = c.get("config_text_split") or ""
+        type_label = "Split Amnezia 2.0"
+    else:
+        config_text = c.get("config_text") or ""
+        type_label = "Amnezia 2.0"
+
+    if not config_text:
+        await callback.message.answer(f"❌ Конфиг {type_label} пуст.")
+        return
+
+    try:
+        import qrcode
+        qr = qrcode.QRCode(version=1, box_size=10, border=3)
+        qr.add_data(config_text)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="black", back_color="white")
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+
+        photo = BufferedInputFile(buf.read(), filename=f"vpn_qr_{qr_type}_{shorten_id(client_id)}.png")
+        await callback.message.answer_photo(
+            photo,
+            caption=(
+                f"📱 <b>QR-код ({type_label}): {c.get('name', '???')}</b>\n\n"
+                "Отсканируйте в AmneziaVPN для подключения."
+            ),
+            parse_mode=ParseMode.HTML,
+            reply_markup=back_to_client_kb(client_id)
+        )
+    except Exception as e:
+        await callback.message.answer(
+            f"📱 <b>Конфиг ({type_label}) для {c.get('name', '???')}:</b>\n\n"
+            f"<code>{config_text[:4000]}</code>",
+            parse_mode=ParseMode.HTML,
+            reply_markup=back_to_client_kb(client_id)
+        )
+
+@router.callback_query(F.data.startswith("client:link_menu:"))
+async def cb_link_menu(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ Нет доступа", show_alert=True)
+        return
+    client_id = callback.data.split(":", 2)[2]
+    await callback.message.edit_text(
+        "🔗 <b>Выбор версии для Deep Link</b>\n\n"
+        "Выберите формат ссылки импорта:\n"
+        "• <b>Amnezia 2.0</b> — для новых версий (протокол awg)\n"
+        "• <b>Amnezia 1.0 (Legacy)</b> — для старых версий (протокол wireguard)\n"
+        "• <b>Раздельный (Split)</b> — раздельный туннель",
+        parse_mode=ParseMode.HTML,
+        reply_markup=link_menu_kb(client_id)
+    )
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("client:link_show:"))
+async def cb_link_show(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ Нет доступа", show_alert=True)
+        return
+    parts = callback.data.split(":", 3)
+    link_type = parts[2]
+    client_id = parts[3]
+
+    try:
+        resp = await http.get(f"/api/v1/clients/{client_id}")
+        resp.raise_for_status()
+        c = resp.json()
+    except Exception as e:
+        await callback.answer(f"Ошибка: {e}", show_alert=True)
+        return
+
+    if link_type == "v1":
+        link = c.get("deep_link") or ""
+        type_label = "Amnezia 1.0 (Legacy)"
+    elif link_type == "split":
+        link = c.get("deep_link_split_v2") or c.get("deep_link_split") or ""
+        type_label = "Split Amnezia 2.0"
+    else:
+        link = c.get("deep_link_v2") or ""
+        type_label = "Amnezia 2.0"
+
+    if not link:
+        await callback.answer(f"Ссылка {type_label} отсутствует", show_alert=True)
+        return
+
+    text = f"🔗 <b>Deep Link ({type_label}): {c.get('name', '???')}</b>\n\n"
+    text += f"<code>{link}</code>\n\n"
+    text += "☝️ Нажмите на ссылку для копирования, затем откройте её в AmneziaVPN."
+
+    if len(text) > 4096:
+        buf = io.BytesIO()
+        buf.write(link.encode())
+        buf.seek(0)
+        doc = BufferedInputFile(buf.read(), filename=f"deeplink_{link_type}_{shorten_id(client_id)}.txt")
+        await callback.message.answer_document(
+            doc,
+            caption=f"🔗 Deep Link ({type_label}) для <b>{c.get('name', '???')}</b>",
+            parse_mode=ParseMode.HTML,
+            reply_markup=back_to_client_kb(client_id)
+        )
+    else:
+        await callback.message.answer(
+            text,
+            parse_mode=ParseMode.HTML,
+            reply_markup=back_to_client_kb(client_id),
+            disable_web_page_preview=True
+        )
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("client:conf_menu:"))
+async def cb_conf_menu(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ Нет доступа", show_alert=True)
+        return
+    client_id = callback.data.split(":", 2)[2]
+    await callback.message.edit_text(
+        "📄 <b>Выбор версии для файла .conf</b>\n\n"
+        "Выберите формат конфига:\n"
+        "• <b>Amnezia 2.0</b> — полный конфиг (рекомендуется)\n"
+        "• <b>Amnezia 1.0 (Legacy)</b> — совместимый со стандартным WireGuard\n"
+        "• <b>Раздельный (Split)</b> — раздельный туннель",
+        parse_mode=ParseMode.HTML,
+        reply_markup=conf_menu_kb(client_id)
+    )
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("client:conf_send:"))
+async def cb_conf_send(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ Нет доступа", show_alert=True)
+        return
+    parts = callback.data.split(":", 3)
+    conf_type = parts[2]
+    client_id = parts[3]
+    await callback.answer("⏳ Готовлю файл конфигурации...")
+
+    try:
+        resp = await http.get(f"/api/v1/clients/{client_id}")
+        resp.raise_for_status()
+        c = resp.json()
+    except Exception as e:
+        await callback.answer(f"Ошибка: {e}", show_alert=True)
+        return
+
+    if conf_type == "v1":
+        config_text = c.get("config_text_legacy") or ""
+        filename_suffix = "_legacy"
+        type_label = "Amnezia 1.0 (Legacy)"
+    elif conf_type == "split":
+        config_text = c.get("config_text_split") or ""
+        filename_suffix = "_split"
+        type_label = "Split Amnezia 2.0"
+    else:
+        config_text = c.get("config_text") or ""
+        filename_suffix = "_v2"
+        type_label = "Amnezia 2.0"
+
+    if not config_text:
+        await callback.answer(f"Конфиг {type_label} отсутствует", show_alert=True)
+        return
+
+    buf = io.BytesIO(config_text.encode("utf-8"))
+    doc = BufferedInputFile(buf.read(), filename=f"{c.get('name', 'client')}{filename_suffix}.conf")
+    await callback.message.answer_document(
+        doc,
+        caption=f"📄 Конфиг-файл ({type_label}) для <b>{c.get('name', '???')}</b>",
         parse_mode=ParseMode.HTML,
         reply_markup=back_to_client_kb(client_id)
     )

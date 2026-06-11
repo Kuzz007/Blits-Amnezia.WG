@@ -127,6 +127,8 @@ async def create_client(payload: ClientCreate, api_token: str = Depends(verify_a
             deep_link=deep_link,
             deep_link_v2=deep_link_v2,
             config_text_split=config_text_split,
+            config_text_legacy=config_text_legacy,
+            config_text_split_legacy=config_text_split_legacy,
             deep_link_split=deep_link_split,
             deep_link_split_v2=deep_link_split_v2
         )
@@ -195,6 +197,8 @@ async def list_clients_api(api_token: str = Depends(verify_api_token)):
             deep_link=deep_link,
             deep_link_v2=deep_link_v2,
             config_text_split=config_text_split,
+            config_text_legacy=config_text_legacy,
+            config_text_split_legacy=config_text_split_legacy,
             deep_link_split=deep_link_split,
             deep_link_split_v2=deep_link_split_v2
         ))
@@ -259,6 +263,8 @@ async def get_client_api(client_id: str, api_token: str = Depends(verify_api_tok
         deep_link=deep_link,
         deep_link_v2=deep_link_v2,
         config_text_split=config_text_split,
+        config_text_legacy=config_text_legacy,
+        config_text_split_legacy=config_text_split_legacy,
         deep_link_split=deep_link_split,
         deep_link_split_v2=deep_link_split_v2
     )
