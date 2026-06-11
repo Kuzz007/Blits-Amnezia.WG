@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
@@ -272,27 +272,25 @@
                                     <tr>
                                         <td><input class="client-check" form="bulk-form" type="checkbox" name="client_ids" value="{{ client.id }}"></td>
                                         <td>
-                                            <div class="client-name-cell">
-                                                <strong><a href="/clients/{{ client.id }}" style="color: var(--text-main);">{{ client.name }}</a></strong>
-                                                <span class="client-subtext">Создан: {{ client.created_at | datetime }}</span>
-                                                <span class="client-subtext" style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px;">
-                                                    <span class="badge badge-gray">Amnezia 1</span>
-                                                    <span class="badge badge-gray">Amnezia 2.0</span>
-                                                    <span class="badge badge-success">Full</span>
-                                                    <span class="badge badge-warning">Split</span>
-                                                </span>
-                                                {% if client.telegram_id %}
-                                                <span class="client-subtext"><i class="fa-brands fa-telegram"></i> {{ client.telegram_id }}</span>
-                                                {% endif %}
+                                            <div class="client-name-cell" style="gap: 4px;">
+                                                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                                    <strong><a href="/clients/{{ client.id }}" style="color: var(--text-main); font-size: 15px; font-weight: 600;">{{ client.name }}</a></strong>
+                                                    {% if client.route_type == 'cascade' %}
+                                                    <span class="badge badge-warning" style="font-size: 10px; padding: 2px 8px; font-weight: 600;"><i class="fa-solid fa-route"></i> Каскад</span>
+                                                    {% endif %}
+                                                    {% if client.telegram_id %}
+                                                    <span class="badge badge-gray" style="font-size: 10px; padding: 2px 8px; text-transform: none; font-weight: 500;"><i class="fa-brands fa-telegram" style="color: #24A1DE; margin-right: 4px;"></i> {{ client.telegram_id }}</span>
+                                                    {% endif %}
+                                                </div>
+                                                <span class="client-subtext" style="color: var(--text-muted); font-size: 11px;"><i class="fa-regular fa-calendar-plus" style="margin-right: 4px;"></i> {{ client.created_at | datetime }}</span>
                                             </div>
                                         </td>
                                         <td>
-                                            <code style="font-family: monospace; font-size: 13px; font-weight: 600;">{{ client.display_ip_address }}</code>
-                                            {% if client.route_type == 'cascade' %}
-                                            <span class="client-subtext"><i class="fa-solid fa-route"></i> Каскад</span>
-                                            {% endif %}
+                                            <code style="font-family: monospace; font-size: 13px; font-weight: 600; padding: 3px 6px; background-color: var(--gray-light); border-radius: 6px; border: 1px solid var(--border-color); color: var(--text-main);">{{ client.display_ip_address }}</code>
                                         </td>
-                                        <td>{{ client.expires_at | datetime }}</td>
+                                        <td style="{% if client.is_expired %}color: var(--danger); font-weight: 600;{% endif %}">
+                                            {{ client.expires_at | datetime }}
+                                        </td>
                                         <td class="traffic-cell">
                                             <div class="traffic-line">
                                                 <strong style="color: var(--text-main);">{{ client.traffic_used_text }}</strong>
@@ -302,8 +300,6 @@
                                             <div class="traffic-bar" title="{{ client.traffic_percent }}%">
                                                 <div class="traffic-fill {% if client.traffic_limit_exceeded %}danger{% endif %}" style="--traffic-percent: {{ client.traffic_percent }}%;"></div>
                                             </div>
-                                            {% else %}
-                                            <span class="client-subtext">Ограничение не задано</span>
                                             {% endif %}
                                         </td>
                                         <td>
@@ -330,7 +326,7 @@
                                             </div>
                                         </td>
                                         <td style="text-align: right;">
-                                            <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                                            <div style="display: flex; gap: 6px; justify-content: flex-end; align-items: center;">
                                                 <script id="data-{{ client.id }}" type="application/json">
                                                 {
                                                   "name": "{{ client.name }}",
@@ -344,29 +340,29 @@
                                                   "deep_link_split_v2": "{{ client.deep_link_split_v2 }}"
                                                 }
                                                 </script>
-                                                <button class="btn btn-secondary btn-sm" onclick="openConfigModal('{{ client.id }}')">
+                                                <button class="btn btn-primary btn-sm" onclick="openConfigModal('{{ client.id }}')" title="Конфигурация ключа">
                                                     <i class="fa-solid fa-key"></i> Конфиг
                                                 </button>
-                                                <button class="btn btn-secondary btn-sm" onclick="checkClient('{{ client.id }}', '{{ client.name }}')">
-                                                    <i class="fa-solid fa-stethoscope"></i> Проверить
+                                                <button class="btn btn-secondary btn-sm btn-icon-only" onclick="checkClient('{{ client.id }}', '{{ client.name }}')" title="Проверить статус подключения">
+                                                    <i class="fa-solid fa-stethoscope"></i>
                                                 </button>
                                                 <form action="/clients/{{ client.id }}/extend" method="post" style="display:inline;">
                                                     <input type="hidden" name="days" value="30">
-                                                    <button type="submit" class="btn btn-secondary btn-sm" title="Продлить на 30 дней">
-                                                        <i class="fa-solid fa-clock-rotate-left"></i> +30 дней
+                                                    <button type="submit" class="btn btn-secondary btn-sm btn-icon-only" title="Продлить на 30 дней">
+                                                        <i class="fa-solid fa-clock-rotate-left"></i>
                                                     </button>
                                                 </form>
                                                 {% if client.disabled_at %}
                                                 <form action="/clients/{{ client.id }}/enable" method="post" style="display:inline;">
-                                                    <button type="submit" class="btn btn-primary btn-sm" title="Включить"><i class="fa-solid fa-play"></i></button>
+                                                    <button type="submit" class="btn btn-success btn-sm btn-icon-only" title="Включить"><i class="fa-solid fa-play"></i></button>
                                                 </form>
                                                 {% else %}
                                                 <form action="/clients/{{ client.id }}/disable" method="post" style="display:inline;">
-                                                    <button type="submit" class="btn btn-warning btn-sm" title="Отключить" style="background-color: var(--warning); color: white;"><i class="fa-solid fa-pause"></i></button>
+                                                    <button type="submit" class="btn btn-warning btn-sm btn-icon-only" title="Отключить" style="background-color: var(--warning); color: white;"><i class="fa-solid fa-pause"></i></button>
                                                 </form>
                                                 {% endif %}
                                                 <form action="/clients/{{ client.id }}/delete" method="post" style="display:inline;" onsubmit="return confirm('Удалить этого клиента?');">
-                                                    <button type="submit" class="btn btn-danger btn-sm" title="Удалить"><i class="fa-solid fa-trash-can"></i></button>
+                                                    <button type="submit" class="btn btn-danger btn-sm btn-icon-only" title="Удалить"><i class="fa-solid fa-trash-can"></i></button>
                                                 </form>
                                             </div>
                                         </td>

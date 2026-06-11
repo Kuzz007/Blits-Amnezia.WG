@@ -515,6 +515,17 @@ body {
     border-radius: 6px;
 }
 
+.btn-icon-only {
+    padding: 0 !important;
+    width: 32px !important;
+    height: 32px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 6px !important;
+    flex-shrink: 0;
+}
+
 .theme-toggle {
     display: inline-grid;
     grid-template-columns: repeat(2, minmax(120px, 1fr));
@@ -591,7 +602,7 @@ body {
 }
 
 .table-custom th {
-    padding: 16px 24px;
+    padding: 12px 18px;
     font-weight: 600;
     font-size: 13px;
     color: var(--text-muted);
@@ -602,7 +613,7 @@ body {
 }
 
 .table-custom td {
-    padding: 16px 24px;
+    padding: 12px 18px;
     font-size: 14px;
     border-bottom: 1px solid var(--border-color);
     color: var(--text-main);
