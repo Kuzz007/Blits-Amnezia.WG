@@ -50,15 +50,6 @@ bash <(curl -fsSL https://raw.githubusercontent.com/kuznecovpasa807-ui/Blits-Amn
 bash <(curl -fsSL https://raw.githubusercontent.com/kuznecovpasa807-ui/Blits-Amnezia.WG/main/install.sh) -y --port 80 --password "MySuperSecurePassword123!"
 ```
 
-### 🔑 Установка из приватного репозитория
-Если репозиторий находится в приватном режиме, передайте временный Github Token авторизации:
-
-```bash
-export GITHUB_TOKEN='YOUR_GITHUB_TOKEN'
-bash -c "$(curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" https://raw.githubusercontent.com/kuznecovpasa807-ui/Blits-Amnezia.WG/main/install.sh)"
-unset GITHUB_TOKEN
-```
-
 ---
 
 ## ⚙️ Сравнение профилей VPN
