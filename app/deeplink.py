@@ -31,15 +31,6 @@ def _split_endpoint(endpoint: str) -> tuple[str, int]:
     return host.strip(), port
 
 
-def _replace_config_value(config_text: str, key: str, value: str) -> str:
-    pattern = rf"(?im)^([^\S\r\n]*{re.escape(key)}[^\S\r\n]*=[^\S\r\n]*)([^\r\n#]*)"
-    replacement = rf"\g<1>{value}"
-    updated, count = re.subn(pattern, replacement, config_text, count=1)
-    if count:
-        return updated
-    return config_text.rstrip() + f"\n{key} = {value}\n"
-
-
 def build_amnezia_server_json(
     config_text: str,
     version: str = "1.0",
@@ -57,20 +48,14 @@ def build_amnezia_server_json(
     try:
         dns1, dns2 = _split_dns(_get_config_value(config_text, "DNS"))
         host_name, port = _split_endpoint(_get_config_value(config_text, "Endpoint"))
-        raw_allowed_ips = [
+        allowed_ips = [
             ip.strip()
             for ip in _get_config_value(config_text, "AllowedIPs", "0.0.0.0/0, ::/0").split(",")
             if ip.strip()
         ]
-        default_allowed_ips = ["0.0.0.0/0", "::/0"]
-        split_tunnel_sites = raw_allowed_ips if split_tunnel else []
-        allowed_ips = default_allowed_ips if split_tunnel else raw_allowed_ips
-        native_config_text = config_text.strip()
-        if split_tunnel:
-            native_config_text = _replace_config_value(native_config_text, "AllowedIPs", "0.0.0.0/0, ::/0").strip()
 
         last_config = {
-            "config": native_config_text,
+            "config": config_text.strip(),
             "hostName": host_name,
             "port": port,
             "client_priv_key": _get_config_value(config_text, "PrivateKey"),
@@ -132,8 +117,11 @@ def build_amnezia_server_json(
             "dns2": dns2,
             "hostName": host_name,
             "nameOverriddenByUser": True,
-            "splitTunnelSites": split_tunnel_sites,
-            "splitTunnelType": 1 if split_tunnel else 0,
+            "splitTunnelSites": [],
+            "splitTunnelType": 0,
+            "appSplitTunnelType": 0,
+            "splitTunnelApps": [],
+            "allowedDnsServers": [dns1, dns2],
         }
 
         return server_json
