@@ -8,6 +8,8 @@ import qrcode
 
 AMNEZIA_QR_MAGIC = 1984
 AMNEZIA_QR_CHUNK_SIZE = 850
+QR_BOX_SIZE = 10
+QR_BORDER = 4
 
 
 def split_amnezia_qr_payload(payload: bytes) -> list[str]:
@@ -28,8 +30,8 @@ def render_qr_png(data: str) -> bytes:
     qr = qrcode.QRCode(
         version=1,
         error_correction=qrcode.constants.ERROR_CORRECT_L,
-        box_size=7,
-        border=3,
+        box_size=QR_BOX_SIZE,
+        border=QR_BORDER,
     )
     qr.add_data(data)
     qr.make(fit=True)

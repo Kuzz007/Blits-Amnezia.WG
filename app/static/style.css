@@ -746,7 +746,8 @@ body {
 }
 
 .qr-box img {
-    max-width: 112px;
+    width: min(220px, 32vw);
+    max-width: 100%;
     height: auto;
 }
 
@@ -756,9 +757,9 @@ body {
     gap: 8px;
     align-items: center;
     justify-content: center;
-    min-height: 96px;
+    min-height: 220px;
     width: 100%;
-    max-width: 132px;
+    max-width: 240px;
     justify-self: center;
 }
 
@@ -771,7 +772,7 @@ body {
 
 .qr-show-btn {
     width: 100%;
-    max-width: 136px;
+    max-width: 180px;
     justify-content: center;
     white-space: nowrap;
 }
@@ -1086,11 +1087,12 @@ body {
 
     .qr-series {
         max-width: 100%;
-        min-height: 88px;
+        min-height: 230px;
     }
 
     .qr-box img {
-        max-width: min(230px, 72vw);
+        width: min(260px, 78vw);
+        max-width: 100%;
     }
 
     .qr-show-btn {
