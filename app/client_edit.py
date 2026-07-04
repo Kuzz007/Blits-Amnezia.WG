@@ -12,9 +12,22 @@ from app.routes import check_password_change_required
 from app.vpn_manager import rebuild_and_sync_vpn_config
 
 router = APIRouter(tags=["Client editing"])
+ONLINE_TIMEOUT_SECONDS = 30
+CLIENTS_AUTO_REFRESH_SECONDS = 15
 
 
 def patch_disabled_clients_offline(web_routes_module) -> None:
+    original_statuses = getattr(web_routes_module, "get_client_connection_statuses", None)
+    if original_statuses is not None and not getattr(original_statuses, "_online_timeout_patch", False):
+        def patched_statuses() -> dict:
+            statuses = original_statuses()
+            for status in statuses.values():
+                seconds_ago = status.get("seconds_ago")
+                status["online"] = seconds_ago is not None and seconds_ago <= ONLINE_TIMEOUT_SECONDS
+            return statuses
+        patched_statuses._online_timeout_patch = True
+        setattr(web_routes_module, "get_client_connection_statuses", patched_statuses)
+
     original_client_view = getattr(web_routes_module, "_client_view", None)
     if original_client_view is None or getattr(original_client_view, "_disabled_offline_patch", False):
         return
@@ -122,9 +135,9 @@ async def edit_client_action(
 
 
 def _edit_modal_markup() -> str:
-    return """
+    return f"""
 <style>
-.client-edit-meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:18px}.client-edit-meta-item{background:var(--gray-light);border:1px solid var(--border-color);border-radius:10px;padding:10px 12px;min-width:0}.client-edit-meta-label{display:block;color:var(--text-muted);font-size:11px;margin-bottom:4px}.client-edit-meta-value{display:block;color:var(--text-main);font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.client-edit-alert{display:none;margin:0 0 14px 0;padding:10px 12px;border-radius:10px;border:1px solid #fde68a;background:#fffbeb;color:#b45309;font-size:13px;line-height:1.4}.client-edit-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+.client-edit-meta{{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:18px}}.client-edit-meta-item{{background:var(--gray-light);border:1px solid var(--border-color);border-radius:10px;padding:10px 12px;min-width:0}}.client-edit-meta-label{{display:block;color:var(--text-muted);font-size:11px;margin-bottom:4px}}.client-edit-meta-value{{display:block;color:var(--text-main);font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}.client-edit-alert{{display:none;margin:0 0 14px 0;padding:10px 12px;border-radius:10px;border:1px solid #fde68a;background:#fffbeb;color:#b45309;font-size:13px;line-height:1.4}}.client-edit-form-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}}
 </style>
 <div id="client-edit-modal" class="modal">
   <div class="modal-content" style="max-width:680px;">
@@ -155,18 +168,18 @@ def _edit_modal_markup() -> str:
   </div>
 </div>
 <script>
-async function openClientEditModal(clientId){
+async function openClientEditModal(clientId){{
   const modal=document.getElementById('client-edit-modal');
   const form=document.getElementById('client-edit-form');
-  if(!modal||!form){window.location.href='/clients';return;}
+  if(!modal||!form){{window.location.href='/clients';return;}}
   modal.classList.add('active');
   form.action='/clients/'+clientId+'/edit';
   document.getElementById('client-edit-id').textContent=clientId;
   document.getElementById('client-edit-name').value='';
   document.getElementById('client-edit-expires').value='';
   document.getElementById('client-edit-traffic').value='0';
-  const response=await fetch('/clients/'+clientId+'/edit-data',{credentials:'same-origin'});
-  if(!response.ok){alert('Не удалось загрузить данные клиента.');return;}
+  const response=await fetch('/clients/'+clientId+'/edit-data',{{credentials:'same-origin'}});
+  if(!response.ok){{alert('Не удалось загрузить данные клиента.');return;}}
   const data=await response.json();
   document.getElementById('client-edit-id').textContent=data.id||clientId;
   document.getElementById('client-edit-route').textContent=data.route_type||'local';
@@ -177,8 +190,13 @@ async function openClientEditModal(clientId){
   document.getElementById('client-edit-disabled').style.display=data.disabled?'block':'none';
   document.getElementById('client-edit-cascade').style.display=data.cascade?'block':'none';
   document.getElementById('client-edit-name').focus();
-}
-function closeClientEditModal(){const modal=document.getElementById('client-edit-modal');if(modal)modal.classList.remove('active');}
+}}
+function closeClientEditModal(){{const modal=document.getElementById('client-edit-modal');if(modal)modal.classList.remove('active');}}
+setInterval(function(){{
+  if(document.hidden) return;
+  if(document.querySelector('.modal.active')) return;
+  window.location.reload();
+}}, {CLIENTS_AUTO_REFRESH_SECONDS * 1000});
 </script>
 """
 
