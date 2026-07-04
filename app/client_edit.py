@@ -4,7 +4,7 @@ import re
 from typing import Callable
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.audit import log_event
 from app.database import get_db_connection
@@ -58,35 +58,61 @@ def _escape(value: object) -> str:
     return html.escape(str(value or ""), quote=True)
 
 
+def _load_client(client_id: str):
+    conn = get_db_connection()
+    row = conn.execute("SELECT * FROM clients WHERE id = ? AND deleted_at IS NULL", (client_id,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="Клиент не найден")
+    return dict(row)
+
+
+def _client_edit_payload(client: dict, client_id: str) -> dict:
+    return {
+        "id": client_id,
+        "name": client.get("name") or "",
+        "expires_at": _format_datetime_local(client.get("expires_at") or ""),
+        "traffic_limit_gb": client.get("traffic_limit_gb") or 0,
+        "route_type": client.get("route_type") or "local",
+        "ip": client.get("remote_ip_address") or client.get("ip_address") or "",
+        "disabled": bool(client.get("disabled_at")),
+        "cascade": (client.get("route_type") or "local") == "cascade",
+    }
+
+
+@router.get("/clients/{client_id}/edit-data")
+async def edit_client_data(
+    client_id: str,
+    user: dict = Depends(check_password_change_required),
+):
+    client = _load_client(client_id)
+    return JSONResponse(_client_edit_payload(client, client_id))
+
+
 @router.get("/clients/{client_id}/edit", response_class=HTMLResponse)
 async def edit_client_page(
     request: Request,
     client_id: str,
     user: dict = Depends(check_password_change_required),
 ):
-    conn = get_db_connection()
-    row = conn.execute("SELECT * FROM clients WHERE id = ? AND deleted_at IS NULL", (client_id,)).fetchone()
-    conn.close()
-    if not row:
-        raise HTTPException(status_code=404, detail="Клиент не найден")
-
-    client = dict(row)
-    name = _escape(client.get("name"))
-    expires_at = _escape(_format_datetime_local(client.get("expires_at") or ""))
-    traffic_limit_gb = _escape(client.get("traffic_limit_gb") or 0)
-    route_type = _escape(client.get("route_type") or "local")
-    client_ip = _escape(client.get("remote_ip_address") or client.get("ip_address") or "")
+    client = _load_client(client_id)
+    data = _client_edit_payload(client, client_id)
+    name = _escape(data["name"])
+    expires_at = _escape(data["expires_at"])
+    traffic_limit_gb = _escape(data["traffic_limit_gb"])
+    route_type = _escape(data["route_type"])
+    client_ip = _escape(data["ip"])
     theme = _escape(request.cookies.get("panel_theme", "light"))
     safe_client_id = _escape(client_id)
 
     disabled_note = (
         "<p class='hint warning'>Клиент сейчас отключен. Редактирование не включает его автоматически.</p>"
-        if client.get("disabled_at")
+        if data["disabled"]
         else ""
     )
     cascade_note = (
         "<p class='hint warning'>Это каскадный клиент. Изменения сохраняются в локальной панели; удаленная панель может требовать отдельной синхронизации.</p>"
-        if route_type == "cascade"
+        if data["cascade"]
         else ""
     )
 
@@ -190,14 +216,147 @@ async def edit_client_action(
         clean_name,
         notify=True,
     )
-    return RedirectResponse(url=f"/clients/{client_id}", status_code=303)
+    return RedirectResponse(url="/clients", status_code=303)
 
 
-def _inject_client_edit_buttons(html_text: str) -> str:
-    """
-    Add an Edit button to every client row on the clients list page.
-    """
-    if "Редактировать клиента" in html_text:
+def _edit_modal_markup() -> str:
+    return """
+<style>
+    .client-edit-meta {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 10px;
+        margin-bottom: 18px;
+    }
+    .client-edit-meta-item {
+        background: var(--gray-light);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 10px 12px;
+        min-width: 0;
+    }
+    .client-edit-meta-label {
+        display: block;
+        color: var(--text-muted);
+        font-size: 11px;
+        margin-bottom: 4px;
+    }
+    .client-edit-meta-value {
+        display: block;
+        color: var(--text-main);
+        font-size: 13px;
+        font-weight: 700;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .client-edit-alert {
+        display: none;
+        margin: 0 0 14px 0;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid #fde68a;
+        background: #fffbeb;
+        color: #b45309;
+        font-size: 13px;
+        line-height: 1.4;
+    }
+    .client-edit-form-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 16px;
+    }
+</style>
+<div id="client-edit-modal" class="modal">
+    <div class="modal-content" style="max-width: 680px;">
+        <div class="modal-header">
+            <h3 class="modal-title"><i class="fa-solid fa-pen-to-square"></i> Редактировать клиента</h3>
+            <button class="close-btn" onclick="closeClientEditModal()">&times;</button>
+        </div>
+        <form id="client-edit-form" method="post">
+            <div class="modal-body">
+                <div class="client-edit-meta">
+                    <div class="client-edit-meta-item">
+                        <span class="client-edit-meta-label">ID</span>
+                        <span id="client-edit-id" class="client-edit-meta-value">—</span>
+                    </div>
+                    <div class="client-edit-meta-item">
+                        <span class="client-edit-meta-label">Тип</span>
+                        <span id="client-edit-route" class="client-edit-meta-value">—</span>
+                    </div>
+                    <div class="client-edit-meta-item">
+                        <span class="client-edit-meta-label">IP</span>
+                        <span id="client-edit-ip" class="client-edit-meta-value">—</span>
+                    </div>
+                </div>
+                <p id="client-edit-disabled" class="client-edit-alert">Клиент сейчас отключен. Редактирование не включает его автоматически.</p>
+                <p id="client-edit-cascade" class="client-edit-alert">Это каскадный клиент. Изменения сохраняются в локальной панели; удаленная панель может требовать отдельной синхронизации.</p>
+                <div class="form-group">
+                    <label for="client-edit-name">Имя клиента</label>
+                    <input id="client-edit-name" name="name" class="form-control" type="text" required>
+                </div>
+                <div class="client-edit-form-grid">
+                    <div class="form-group">
+                        <label for="client-edit-expires">Действует до</label>
+                        <input id="client-edit-expires" name="expires_at" class="form-control" type="datetime-local" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="client-edit-traffic">Лимит трафика, ГБ</label>
+                        <input id="client-edit-traffic" name="traffic_limit_gb" class="form-control" type="number" min="0" step="0.1" required>
+                        <span class="client-subtext">0 = безлимит. Ключи и IP клиента сохраняются.</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeClientEditModal()">Отмена</button>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="fa-solid fa-floppy-disk"></i> Сохранить</button>
+            </div>
+        </form>
+    </div>
+</div>
+<script>
+    async function openClientEditModal(clientId) {
+        const modal = document.getElementById('client-edit-modal');
+        const form = document.getElementById('client-edit-form');
+        if (!modal || !form) {
+            window.location.href = '/clients/' + clientId + '/edit';
+            return;
+        }
+        modal.classList.add('active');
+        form.action = '/clients/' + clientId + '/edit';
+        document.getElementById('client-edit-id').textContent = clientId;
+        document.getElementById('client-edit-name').value = '';
+        document.getElementById('client-edit-expires').value = '';
+        document.getElementById('client-edit-traffic').value = '0';
+        try {
+            const response = await fetch('/clients/' + clientId + '/edit-data', { credentials: 'same-origin' });
+            if (!response.ok) throw new Error('edit data request failed');
+            const data = await response.json();
+            document.getElementById('client-edit-id').textContent = data.id || clientId;
+            document.getElementById('client-edit-route').textContent = data.route_type || 'local';
+            document.getElementById('client-edit-ip').textContent = data.ip || '—';
+            document.getElementById('client-edit-name').value = data.name || '';
+            document.getElementById('client-edit-expires').value = data.expires_at || '';
+            document.getElementById('client-edit-traffic').value = data.traffic_limit_gb || 0;
+            document.getElementById('client-edit-disabled').style.display = data.disabled ? 'block' : 'none';
+            document.getElementById('client-edit-cascade').style.display = data.cascade ? 'block' : 'none';
+            document.getElementById('client-edit-name').focus();
+        } catch (error) {
+            alert('Не удалось загрузить данные клиента. Открою обычную страницу редактирования.');
+            window.location.href = '/clients/' + clientId + '/edit';
+        }
+    }
+
+    function closeClientEditModal() {
+        const modal = document.getElementById('client-edit-modal');
+        if (modal) modal.classList.remove('active');
+    }
+</script>
+"""
+
+
+def _inject_client_edit_ui(html_text: str) -> str:
+    if "client-edit-modal" in html_text:
         return html_text
 
     pattern = re.compile(
@@ -208,15 +367,17 @@ def _inject_client_edit_buttons(html_text: str) -> str:
     def repl(match: re.Match) -> str:
         client_id = html.escape(match.group(2), quote=True)
         edit_button = (
-            f'<a href="/clients/{client_id}/edit" '
-            'class="btn btn-secondary btn-sm btn-icon-only" '
-            'title="Редактировать клиента">'
+            f'<button type="button" class="btn btn-secondary btn-sm btn-icon-only" '
+            f'onclick="openClientEditModal(\'{client_id}\')" title="Редактировать клиента">'
             '<i class="fa-solid fa-pen-to-square"></i>'
-            '</a>'
+            '</button>'
         )
         return edit_button + "\n                                                " + match.group(1)
 
-    return pattern.sub(repl, html_text)
+    html_text = pattern.sub(repl, html_text)
+    if "</body>" in html_text:
+        html_text = html_text.replace("</body>", _edit_modal_markup() + "\n</body>", 1)
+    return html_text
 
 
 def install_client_edit_button_middleware(app) -> None:
@@ -238,7 +399,7 @@ def install_client_edit_button_middleware(app) -> None:
         except UnicodeDecodeError:
             return HTMLResponse(content=body, status_code=response.status_code, headers=dict(response.headers))
 
-        html_text = _inject_client_edit_buttons(html_text)
+        html_text = _inject_client_edit_ui(html_text)
         headers = dict(response.headers)
         headers.pop("content-length", None)
         return HTMLResponse(content=html_text, status_code=response.status_code, headers=headers)
