@@ -12,7 +12,7 @@ from app.routes import check_password_change_required
 from app.vpn_manager import rebuild_and_sync_vpn_config
 
 router = APIRouter(tags=["Client editing"])
-ONLINE_TIMEOUT_SECONDS = 600
+ONLINE_TIMEOUT_SECONDS = 5
 CLIENTS_AUTO_REFRESH_SECONDS = 1
 
 
