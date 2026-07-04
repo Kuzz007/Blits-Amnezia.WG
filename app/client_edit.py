@@ -192,11 +192,22 @@ async function openClientEditModal(clientId){{
   document.getElementById('client-edit-name').focus();
 }}
 function closeClientEditModal(){{const modal=document.getElementById('client-edit-modal');if(modal)modal.classList.remove('active');}}
-setInterval(function(){{
+async function refreshClientsTableQuietly(){{
   if(document.hidden) return;
   if(document.querySelector('.modal.active')) return;
-  window.location.reload();
-}}, {CLIENTS_AUTO_REFRESH_SECONDS * 1000});
+  if(document.querySelector('.client-check:checked')) return;
+  if(document.querySelector('input:focus,textarea:focus,select:focus')) return;
+  try{{
+    const response=await fetch(window.location.pathname+window.location.search,{{credentials:'same-origin',cache:'no-store'}});
+    if(!response.ok) return;
+    const text=await response.text();
+    const doc=new DOMParser().parseFromString(text,'text/html');
+    const freshBody=doc.querySelector('.table-custom tbody');
+    const currentBody=document.querySelector('.table-custom tbody');
+    if(freshBody&&currentBody) currentBody.innerHTML=freshBody.innerHTML;
+  }}catch(error){{}}
+}}
+setInterval(refreshClientsTableQuietly, {CLIENTS_AUTO_REFRESH_SECONDS * 1000});
 </script>
 """
 
