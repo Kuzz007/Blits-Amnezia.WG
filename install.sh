@@ -4,7 +4,7 @@
 # -------------------------------------------------------------------------
 set -e
 
-REPO_ARCHIVE_URL="${BLITZ_REPO_ARCHIVE_URL:-https://github.com/Blits-dev-vibe/Blits-Amnezia.WG/archive/refs/heads/main.tar.gz}"
+REPO_ARCHIVE_URL="${BLITZ_REPO_ARCHIVE_URL:-https://github.com/Kuzz007/Blits-Amnezia.WG/archive/refs/heads/main.tar.gz}"
 INSTALL_DIR="${BLITZ_INSTALL_DIR:-/opt/blitz-amnezia-panel}"
 
 # Цвета для вывода в терминал
