@@ -13,7 +13,7 @@ from app.vpn_manager import rebuild_and_sync_vpn_config
 
 router = APIRouter(tags=["Client editing"])
 ONLINE_TIMEOUT_SECONDS = 30
-CLIENTS_AUTO_REFRESH_SECONDS = 15
+CLIENTS_AUTO_REFRESH_SECONDS = 5
 
 
 def patch_disabled_clients_offline(web_routes_module) -> None:
@@ -85,6 +85,59 @@ def _client_payload(client: dict, client_id: str) -> dict:
         "disabled": bool(client.get("disabled_at")),
         "cascade": route_type == "cascade",
     }
+
+
+def _client_status_payload(client: dict) -> dict:
+    if client.get("traffic_limit_exceeded"):
+        key_label, key_class = "Лимит исчерпан", "badge-danger"
+    elif client.get("disabled_at"):
+        key_label, key_class = "Выключен", "badge-gray"
+    elif client.get("is_expired"):
+        key_label, key_class = "Истек срок", "badge-danger"
+    else:
+        key_label, key_class = "Активен", "badge-success"
+
+    return {
+        "id": client.get("id"),
+        "key_label": key_label,
+        "key_class": key_class,
+        "is_online": bool(client.get("is_online")),
+        "last_seen_text": client.get("last_seen_text") or "еще не подключался",
+        "connected_interface": client.get("connected_interface") or "",
+        "traffic_used_text": client.get("traffic_used_text") or "0 B",
+        "traffic_limit_text": client.get("traffic_limit_text") or "Безлимит",
+        "traffic_percent": int(client.get("traffic_percent") or 0),
+        "traffic_limit_exceeded": bool(client.get("traffic_limit_exceeded")),
+    }
+
+
+@router.get("/clients/statuses")
+async def clients_statuses(request: Request, user: dict = Depends(check_password_change_required)):
+    import app.routes as web_routes
+
+    web_routes.enforce_expired_clients()
+    web_routes.refresh_client_traffic_usage(enforce_limits=True)
+    search = (request.query_params.get("search") or "").strip()
+    conn = get_db_connection()
+    try:
+        if search:
+            query = f"%{search}%"
+            rows = conn.execute(
+                "SELECT * FROM clients WHERE deleted_at IS NULL AND (name LIKE ? OR ip_address LIKE ?) ORDER BY created_at DESC",
+                (query, query),
+            ).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM clients WHERE deleted_at IS NULL ORDER BY created_at DESC").fetchall()
+    finally:
+        conn.close()
+
+    connection_statuses = web_routes.get_client_connection_statuses()
+    traffic_usage = web_routes.get_clients_traffic_usage()
+    clients = [
+        _client_status_payload(web_routes._client_view(dict(row), connection_statuses, traffic_usage))
+        for row in rows
+    ]
+    return JSONResponse({"online_timeout_seconds": ONLINE_TIMEOUT_SECONDS, "clients": clients})
 
 
 @router.get("/clients/{client_id}/edit-data")
@@ -168,6 +221,7 @@ def _edit_modal_markup() -> str:
   </div>
 </div>
 <script>
+function escapeClientHtml(value){{return String(value??'').replace(/[&<>\"']/g,function(ch){{return {{'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}}[ch];}});}}
 async function openClientEditModal(clientId){{
   const modal=document.getElementById('client-edit-modal');
   const form=document.getElementById('client-edit-form');
@@ -192,22 +246,43 @@ async function openClientEditModal(clientId){{
   document.getElementById('client-edit-name').focus();
 }}
 function closeClientEditModal(){{const modal=document.getElementById('client-edit-modal');if(modal)modal.classList.remove('active');}}
-async function refreshClientsTableQuietly(){{
+function findClientRow(clientId){{
+  const checks=document.querySelectorAll('.client-check');
+  for(const check of checks){{if(check.value===clientId)return check.closest('tr');}}
+  return null;
+}}
+function renderTrafficCell(client){{
+  const percent=Math.max(0,Math.min(100,Number(client.traffic_percent||0)));
+  const bar=client.traffic_limit_text==='Безлимит'?'':'<div class="traffic-bar" title="'+percent+'%"><div class="traffic-fill '+(client.traffic_limit_exceeded?'danger':'')+'" style="--traffic-percent: '+percent+'%;"></div></div>';
+  return '<div class="traffic-line"><strong style="color: var(--text-main);">'+escapeClientHtml(client.traffic_used_text)+'</strong><span>'+escapeClientHtml(client.traffic_limit_text)+'</span></div>'+bar;
+}}
+function renderKeyCell(client){{return '<span class="badge '+escapeClientHtml(client.key_class)+'">'+escapeClientHtml(client.key_label)+'</span>';}}
+function renderConnectionCell(client){{
+  const badge=client.is_online?'badge-success':'badge-gray';
+  const dot=client.is_online?'online':'offline';
+  const label=client.is_online?'Онлайн':'Не подключен';
+  const details=escapeClientHtml(client.last_seen_text||'')+(client.connected_interface?', '+escapeClientHtml(client.connected_interface):'');
+  return '<div class="status-cell"><span class="badge '+badge+'"><span class="status-dot '+dot+'"></span> '+label+'</span><span class="client-subtext">'+details+'</span></div>';
+}}
+async function refreshClientStatusesQuietly(){{
   if(document.hidden) return;
   if(document.querySelector('.modal.active')) return;
   if(document.querySelector('.client-check:checked')) return;
   if(document.querySelector('input:focus,textarea:focus,select:focus')) return;
   try{{
-    const response=await fetch(window.location.pathname+window.location.search,{{credentials:'same-origin',cache:'no-store'}});
+    const response=await fetch('/clients/statuses'+window.location.search,{{credentials:'same-origin',cache:'no-store'}});
     if(!response.ok) return;
-    const text=await response.text();
-    const doc=new DOMParser().parseFromString(text,'text/html');
-    const freshBody=doc.querySelector('.table-custom tbody');
-    const currentBody=document.querySelector('.table-custom tbody');
-    if(freshBody&&currentBody) currentBody.innerHTML=freshBody.innerHTML;
+    const data=await response.json();
+    for(const client of data.clients||[]){{
+      const row=findClientRow(client.id);
+      if(!row||row.children.length<7) continue;
+      row.children[4].innerHTML=renderTrafficCell(client);
+      row.children[5].innerHTML=renderKeyCell(client);
+      row.children[6].innerHTML=renderConnectionCell(client);
+    }}
   }}catch(error){{}}
 }}
-setInterval(refreshClientsTableQuietly, {CLIENTS_AUTO_REFRESH_SECONDS * 1000});
+setInterval(refreshClientStatusesQuietly, {CLIENTS_AUTO_REFRESH_SECONDS * 1000});
 </script>
 """
 
