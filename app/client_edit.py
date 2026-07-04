@@ -1,6 +1,9 @@
 import datetime
 import html
+import ipaddress
 import re
+import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -14,6 +17,8 @@ from app.vpn_manager import rebuild_and_sync_vpn_config
 router = APIRouter(tags=["Client editing"])
 ONLINE_TIMEOUT_SECONDS = 180
 CLIENTS_AUTO_REFRESH_SECONDS = 5
+ACTIVE_PROBE_TIMEOUT_SECONDS = 1
+ACTIVE_PROBE_WORKERS = 16
 
 
 def patch_disabled_clients_offline(web_routes_module) -> None:
@@ -87,6 +92,59 @@ def _client_payload(client: dict, client_id: str) -> dict:
     }
 
 
+def _client_probe_ip(client: dict) -> str | None:
+    if client.get("disabled_at") or client.get("route_type") == "cascade":
+        return None
+    value = str(client.get("display_ip_address") or client.get("ip_address") or "").strip()
+    if not value or value.startswith("cascade:"):
+        return None
+    try:
+        ip = ipaddress.ip_address(value.split("/", 1)[0])
+    except ValueError:
+        return None
+    if ip.version != 4:
+        return None
+    return str(ip)
+
+
+def _ping_client_ip(ip: str) -> bool | None:
+    try:
+        proc = subprocess.run(
+            ["ping", "-4", "-n", "-c", "1", "-W", str(ACTIVE_PROBE_TIMEOUT_SECONDS), ip],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=ACTIVE_PROBE_TIMEOUT_SECONDS + 1,
+            check=False,
+        )
+        return proc.returncode == 0
+    except FileNotFoundError:
+        return None
+    except Exception:
+        return False
+
+
+def _apply_active_probe(clients: list[dict]) -> None:
+    targets = [(client, ip) for client in clients if (ip := _client_probe_ip(client))]
+    if not targets:
+        return
+
+    with ThreadPoolExecutor(max_workers=min(ACTIVE_PROBE_WORKERS, len(targets))) as executor:
+        future_map = {executor.submit(_ping_client_ip, ip): client for client, ip in targets}
+        for future in as_completed(future_map):
+            client = future_map[future]
+            try:
+                probe_online = future.result()
+            except Exception:
+                probe_online = False
+            if probe_online is None:
+                continue
+            client["is_online"] = bool(probe_online)
+            if probe_online:
+                client["last_seen_text"] = "связь есть"
+            elif not client.get("last_seen_text"):
+                client["last_seen_text"] = "связи нет"
+
+
 def _client_status_payload(client: dict) -> dict:
     if client.get("traffic_limit_exceeded"):
         key_label, key_class = "Лимит исчерпан", "badge-danger"
@@ -133,11 +191,14 @@ async def clients_statuses(request: Request, user: dict = Depends(check_password
 
     connection_statuses = web_routes.get_client_connection_statuses()
     traffic_usage = web_routes.get_clients_traffic_usage()
-    clients = [
-        _client_status_payload(web_routes._client_view(dict(row), connection_statuses, traffic_usage))
-        for row in rows
-    ]
-    return JSONResponse({"online_timeout_seconds": ONLINE_TIMEOUT_SECONDS, "clients": clients})
+    clients = [web_routes._client_view(dict(row), connection_statuses, traffic_usage) for row in rows]
+    _apply_active_probe(clients)
+    return JSONResponse({
+        "online_timeout_seconds": ONLINE_TIMEOUT_SECONDS,
+        "active_probe": True,
+        "active_probe_timeout_seconds": ACTIVE_PROBE_TIMEOUT_SECONDS,
+        "clients": [_client_status_payload(client) for client in clients],
+    })
 
 
 @router.get("/clients/{client_id}/edit-data")
