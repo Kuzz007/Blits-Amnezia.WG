@@ -22,6 +22,22 @@ def _limit_bytes(limit_gb: float) -> int:
     return int(limit_gb * 1024 * 1024 * 1024) if limit_gb > 0 else 0
 
 
+def _ensure_traffic_counter_columns(conn) -> None:
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(clients)").fetchall()}
+    if "traffic_last_raw_bytes" not in columns:
+        conn.execute("ALTER TABLE clients ADD COLUMN traffic_last_raw_bytes INTEGER DEFAULT 0")
+
+
+def _account_usage(saved_total: int, last_raw: int, live_total: int) -> tuple[int, int]:
+    if live_total <= 0:
+        return saved_total, last_raw
+    if last_raw <= 0:
+        return saved_total, live_total
+    if live_total >= last_raw:
+        return saved_total + (live_total - last_raw), live_total
+    return saved_total + live_total, live_total
+
+
 def patch_refresh_client_traffic_usage(web_routes_module) -> None:
     _patch_client_edit_route(web_routes_module)
 
@@ -36,9 +52,10 @@ def patch_refresh_client_traffic_usage(web_routes_module) -> None:
 
         conn = web_routes_module.get_db_connection()
         try:
+            _ensure_traffic_counter_columns(conn)
             rows = conn.execute(
                 """
-                SELECT id, name, public_key, traffic_limit_gb, traffic_used_bytes, disabled_at
+                SELECT id, name, public_key, traffic_limit_gb, traffic_used_bytes, traffic_last_raw_bytes, disabled_at
                 FROM clients
                 WHERE deleted_at IS NULL
                 """
@@ -47,12 +64,13 @@ def patch_refresh_client_traffic_usage(web_routes_module) -> None:
             for row in rows:
                 live_total = int(usage.get(row["public_key"], {}).get("total", 0) or 0)
                 saved_total = int(row["traffic_used_bytes"] or 0)
-                used_total = max(saved_total, live_total)
+                last_raw = int(row["traffic_last_raw_bytes"] or 0)
+                used_total, next_raw = _account_usage(saved_total, last_raw, live_total)
 
-                if used_total > saved_total:
+                if used_total != saved_total or next_raw != last_raw:
                     conn.execute(
-                        "UPDATE clients SET traffic_used_bytes = ? WHERE id = ?",
-                        (used_total, row["id"]),
+                        "UPDATE clients SET traffic_used_bytes = ?, traffic_last_raw_bytes = ? WHERE id = ?",
+                        (used_total, next_raw, row["id"]),
                     )
 
                 limit_gb = float(row["traffic_limit_gb"] or 0)
@@ -109,6 +127,7 @@ def _patch_client_edit_route(web_routes_module) -> None:
         reenabled_by_limit = False
         disabled_by_new_limit = False
         try:
+            _ensure_traffic_counter_columns(conn)
             client = conn.execute(
                 "SELECT * FROM clients WHERE id = ? AND deleted_at IS NULL",
                 (client_id,),
@@ -118,8 +137,9 @@ def _patch_client_edit_route(web_routes_module) -> None:
 
             route_type = client["route_type"] if "route_type" in client.keys() else "local"
             saved_total = int(client["traffic_used_bytes"] or 0)
+            last_raw = int(client["traffic_last_raw_bytes"] or 0)
             live_total = int(live_usage.get(client["public_key"], {}).get("total", 0) or 0)
-            used_total = max(saved_total, live_total)
+            used_total, next_raw = _account_usage(saved_total, last_raw, live_total)
             old_limit_gb = float(client["traffic_limit_gb"] or 0)
             old_limit_bytes = _limit_bytes(old_limit_gb)
             new_limit_bytes = _limit_bytes(traffic_limit_gb)
@@ -134,10 +154,10 @@ def _patch_client_edit_route(web_routes_module) -> None:
                 conn.execute(
                     """
                     UPDATE clients
-                    SET name = ?, expires_at = ?, traffic_limit_gb = ?, disabled_at = NULL, traffic_used_bytes = MAX(COALESCE(traffic_used_bytes, 0), ?)
+                    SET name = ?, expires_at = ?, traffic_limit_gb = ?, disabled_at = NULL, traffic_used_bytes = ?, traffic_last_raw_bytes = ?
                     WHERE id = ?
                     """,
-                    (clean_name, normalized_expires_at, traffic_limit_gb, used_total, client_id),
+                    (clean_name, normalized_expires_at, traffic_limit_gb, used_total, next_raw, client_id),
                 )
                 reenabled_by_limit = True
             elif should_disable:
@@ -145,20 +165,20 @@ def _patch_client_edit_route(web_routes_module) -> None:
                 conn.execute(
                     """
                     UPDATE clients
-                    SET name = ?, expires_at = ?, traffic_limit_gb = ?, disabled_at = ?, traffic_used_bytes = MAX(COALESCE(traffic_used_bytes, 0), ?)
+                    SET name = ?, expires_at = ?, traffic_limit_gb = ?, disabled_at = ?, traffic_used_bytes = ?, traffic_last_raw_bytes = ?
                     WHERE id = ?
                     """,
-                    (clean_name, normalized_expires_at, traffic_limit_gb, now, used_total, client_id),
+                    (clean_name, normalized_expires_at, traffic_limit_gb, now, used_total, next_raw, client_id),
                 )
                 disabled_by_new_limit = True
             else:
                 conn.execute(
                     """
                     UPDATE clients
-                    SET name = ?, expires_at = ?, traffic_limit_gb = ?, traffic_used_bytes = MAX(COALESCE(traffic_used_bytes, 0), ?)
+                    SET name = ?, expires_at = ?, traffic_limit_gb = ?, traffic_used_bytes = ?, traffic_last_raw_bytes = ?
                     WHERE id = ?
                     """,
-                    (clean_name, normalized_expires_at, traffic_limit_gb, used_total, client_id),
+                    (clean_name, normalized_expires_at, traffic_limit_gb, used_total, next_raw, client_id),
                 )
 
             conn.commit()
