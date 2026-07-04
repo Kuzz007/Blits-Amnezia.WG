@@ -8,11 +8,20 @@ import app.routes as web_routes
 from app.routes import router as web_router
 from app.api import router as api_router
 from app.client_edit import install_client_edit_button_middleware, patch_disabled_clients_offline, router as client_edit_router
+from app.dashboard_top import build_top_clients
 from app.status_activity import patch_statuses_by_traffic
 from app.web_gate import WebGateMiddleware
 
 patch_disabled_clients_offline(web_routes)
 patch_statuses_by_traffic(web_routes)
+_original_dashboard_stats = web_routes.get_dashboard_stats
+
+def dashboard_stats_with_summed_top_clients():
+    stats = _original_dashboard_stats()
+    stats["top_clients"] = build_top_clients(web_routes)
+    return stats
+
+web_routes.get_dashboard_stats = dashboard_stats_with_summed_top_clients
 
 app = FastAPI(title="AmneziaWG Admin Panel MVP", description="AmneziaWG admin panel", version="1.0.0")
 app.add_middleware(WebGateMiddleware)
