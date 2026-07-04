@@ -138,11 +138,14 @@ def _apply_active_probe(clients: list[dict]) -> None:
                 probe_online = False
             if probe_online is None:
                 continue
-            client["is_online"] = bool(probe_online)
             if probe_online:
+                client["is_online"] = True
                 client["last_seen_text"] = "связь есть"
-            elif not client.get("last_seen_text"):
-                client["last_seen_text"] = "связи нет"
+                client["active_probe_ok"] = True
+            else:
+                client["active_probe_ok"] = False
+                # Важно: если роутер блокирует ICMP, ping не должен ложно выключать клиента.
+                # Offline по-прежнему решается handshake-логикой WireGuard/AmneziaWG.
 
 
 def _client_status_payload(client: dict) -> dict:
@@ -166,6 +169,7 @@ def _client_status_payload(client: dict) -> dict:
         "traffic_limit_text": client.get("traffic_limit_text") or "Безлимит",
         "traffic_percent": int(client.get("traffic_percent") or 0),
         "traffic_limit_exceeded": bool(client.get("traffic_limit_exceeded")),
+        "active_probe_ok": client.get("active_probe_ok"),
     }
 
 
