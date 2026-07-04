@@ -1,3 +1,7 @@
+def _limit_text(limit_gb: float) -> str:
+    return f"{limit_gb:g} GB" if limit_gb > 0 else "Безлимит"
+
+
 def build_top_clients(web_routes_module, limit: int = 5) -> list[dict]:
     format_bytes = getattr(web_routes_module, "format_bytes")
     usage_by_peer = web_routes_module.get_clients_traffic_usage()
@@ -6,7 +10,7 @@ def build_top_clients(web_routes_module, limit: int = 5) -> list[dict]:
     conn = web_routes_module.get_db_connection()
     try:
         rows = conn.execute(
-            "SELECT name, public_key, traffic_used_bytes FROM clients WHERE deleted_at IS NULL"
+            "SELECT name, public_key, traffic_used_bytes, traffic_limit_gb FROM clients WHERE deleted_at IS NULL"
         ).fetchall()
     finally:
         conn.close()
@@ -19,13 +23,19 @@ def build_top_clients(web_routes_module, limit: int = 5) -> list[dict]:
         live_total = int(usage.get("total", rx + tx) or 0)
         saved_total = int(row["traffic_used_bytes"] or 0)
         total = max(live_total, saved_total)
+        limit_gb = float(row["traffic_limit_gb"] or 0)
+        limit_bytes = int(limit_gb * 1024 * 1024 * 1024) if limit_gb > 0 else 0
+        percent = min(100, round(total / limit_bytes * 100)) if limit_bytes else 0
         status = statuses.get(row["public_key"], {})
         top_clients.append({
             "name": row["name"],
             "online": bool(status.get("online")),
             "rx": format_bytes(rx),
             "tx": format_bytes(tx),
-            "total": format_bytes(total),
+            "used": format_bytes(total),
+            "limit": _limit_text(limit_gb),
+            "percent": percent,
+            "total": f"{format_bytes(total)} / {_limit_text(limit_gb)}",
             "total_bytes": total,
         })
 
