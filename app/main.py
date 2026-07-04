@@ -10,8 +10,10 @@ from app.api import router as api_router
 from app.client_edit import install_client_edit_button_middleware, patch_disabled_clients_offline, router as client_edit_router
 from app.dashboard_top import build_top_clients
 from app.status_activity import patch_statuses_by_traffic
+from app.traffic_limit_patch import patch_refresh_client_traffic_usage
 from app.web_gate import WebGateMiddleware
 
+patch_refresh_client_traffic_usage(web_routes)
 patch_disabled_clients_offline(web_routes)
 patch_statuses_by_traffic(web_routes)
 _original_dashboard_stats = web_routes.get_dashboard_stats
