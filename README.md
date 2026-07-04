@@ -36,10 +36,10 @@
 > [!IMPORTANT]
 > Для корректной установки требуются права суперпользователя `root`. Поддерживаются операционные системы семейства Debian/Ubuntu (рекомендуется Ubuntu 22.04 LTS и новее).
 
-Выполните команду на сервере для запуска автоматической интерактивной установки:
+Выполните команду на сервере для запуска автоматической интерактивной установки из форка **Kuzz007/Blits-Amnezia.WG**:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/Blits-dev-vibe/Blits-Amnezia.WG/main/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/Kuzz007/Blits-Amnezia.WG/main/install.sh)
 ```
 
 ### 🤖 Автоматическая (тихая) установка
@@ -47,7 +47,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/Blits-dev-vibe/Blits-Amnezia
 
 ```bash
 # Пример бесшумной установки на 80 порт с кастомным паролем
-bash <(curl -fsSL https://raw.githubusercontent.com/Blits-dev-vibe/Blits-Amnezia.WG/main/install.sh) -y --port 80 --password "MySuperSecurePassword123!"
+bash <(curl -fsSL https://raw.githubusercontent.com/Kuzz007/Blits-Amnezia.WG/main/install.sh) -y --port 80 --password "MySuperSecurePassword123!"
 ```
 
 ---
@@ -102,7 +102,7 @@ blits
 
 Для ручного обновления кода панели выполните:
 ```bash
-cd /root/Blits-Amnezia.WG
+cd /opt/blitz-amnezia-panel
 git pull origin main
 docker compose --profile ssl up -d --build
 ```
